@@ -58,7 +58,9 @@ def _run(client, sql_file: str, params: dict | None = None) -> pd.DataFrame:
     if gb > MAX_GB:
         raise RuntimeError(f"{sql_file} would scan {gb:.1f} GB > BQ_MAX_GB={MAX_GB}; narrow the dates or raise the cap")
     job = client.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=qp))
-    return job.result().to_dataframe(create_bqstorage_client=False)
+    rows = [dict(r.items()) for r in job.result()]  # no db-dtypes / pyarrow dependency
+    print(f"bq: {sql_file} -> {len(rows)} rows, billed {(job.total_bytes_billed or 0) / 1e9:.2f} GB", flush=True)
+    return pd.DataFrame(rows)
 
 
 def freshness(client) -> dict:
