@@ -1,156 +1,104 @@
-# NEAR Valuation Check
+# NEAR Intents Usage Test
 
-**Is NEAR undervalued or overvalued?** A re-runnable model answers this from NEAR's own on-chain fundamentals,
-with no peer chain required. Comparisons with other chains are an optional extra. Built for the NEAR HACKATHON
-**Investment Thesis** track (`thesis`).
+An evidence-first investment thesis for the NEAR HACKATHON **Investment Thesis** track (`thesis`).
 
-- **Dashboard:** https://almondxxx.github.io/nearthesis/ (refreshed daily from public data)
-- **Thesis:** [`THESIS.md`](THESIS.md). Latest numbers: [`reports/latest.md`](reports/latest.md)
+**Hypothesis under test:** *cross-chain volume through NEAR Intents is a better leading indicator of real
+network usage than the NEAR token price.* The repo tests that claim and reports what the data says, including
+anything that cuts against it.
+
+- **Dashboard:** https://almondxxx.github.io/nearthesis/. Every chart shows the query behind it and one plain
+  sentence on what it shows. The page is rebuilt daily from raw data.
+- **Thesis:** [`THESIS.md`](THESIS.md): the claim, evidence for, evidence against, what would change my mind, and
+  what can't be computed.
+- **Latest numbers:** [`reports/thesis_results.md`](reports/thesis_results.md), generated on every run.
 - **For AI reviewers:** [`AGENT.md`](AGENT.md)
+- **Appendix:** [`docs/valuation.html`](docs/valuation.html), a separate check of whether NEAR's market cap is
+  rich or cheap against its own fundamentals.
 
-## The problem
-Bullish and bearish cases for NEAR both pick favourable numbers: account counts inflated by airdrop farming, DEX
-volume quoted without revenue, or a chart picked to suit the argument. Neither can be checked or re-run. This
-project scores NEAR's market cap against a fixed set of fundamentals, the same way every day. It publishes the
-verdict, the code and the data.
-
-## How the verdict works (NEAR only)
-Three independent checks; the verdict is the majority view (Mixed if no two agree).
-
-| Check | Question | Overvalued if | Undervalued if |
-|---|---|---|---|
-| **1. Fair value** | What would NEAR be worth at its own median multiples over the last 2 years? | market cap above the fair-value band | below the band |
-| **2. Confidence Premium** | Is the market-cap percentile ahead of the fundamentals percentile (last 365 days)? | +15 or more | -15 or less |
-| **3. Multiples vs history** | Where do today's multiples rank in NEAR's last 2 years (0-100)? | median rank 75 or more | 25 or less |
-
-- **Fair value.** For each of five fundamentals, multiply today's figure by NEAR's median multiple over the last
-  2 years. The fundamentals are revenue (fees burned), DEX volume, TVL, stablecoin supply and returning accounts.
-  Fair value is the geometric mean of the five results. The band uses the 25th and 75th percentile multiples.
-- **Confidence Premium.** Every input is scored as a percentile against NEAR's trailing 365 days:
-  - Network: active accounts, returning accounts, transactions, fees.
-  - DeFi: TVL, DEX volume, stablecoins.
-  - Tokenomics: staked share, net supply growth, and the share of issuance offset by fee burn.
-
-  The three pillars average into a **Fundamentals Index**. The market cap percentile is the **Valuation Index**.
-  The premium is Valuation minus Fundamentals.
-- **No look-ahead.** Every window looks backward only. A test checks this.
-- **Reliability checks:** the premium recomputed under 2,000 random weightings, and the 90-day forward price change
-  after each reading. The second is descriptive only.
-
-### Result at the committed snapshot (2026-11-12)
-| | |
-|---|---|
-| **Verdict** | **Overvalued** (2 of 3 checks) |
-| Market cap / price | $4.70B / $3.59 |
-| Fair value (band) | $2.52B, about $1.92 a token ($1.90B–$5.37B) |
-| Confidence Premium | +28.6 (positive under 100% of 2,000 random weightings) |
-| Multiples rank vs 2-year history | 76/100 |
-
-NEAR trades at its usual multiple of DEX flow, which is 93% NEAR Intents and up 17x in two years. But it trades at
-2–3x its usual multiple of revenue, stablecoins and returning users. Details in [`THESIS.md`](THESIS.md).
-
-## Optional comparisons
-None of these affect the verdict. On the dashboard they are behind a "Compare with" toggle:
-- **AVAX**: a similar-sized L1.
-- **THORChain**: the same business as NEAR Intents (cross-chain swaps).
-- **L1 basket median**: AVAX, Sui, Aptos, TON, ICP and Cardano, as a market-wide control.
-- **Pump.fun event study**: Pump.fun's app added NEAR tokens on 2026-11-04 and Avalanche tokens right after (2026-11-05,
-  approximate). The chart indexes each chain to its own 14 days before go-live, against a control group of L1s
-  Pump.fun didn't add.
-
-## Try it
-
-**Requirements:** Python 3.10+.
-
-**1. Rebuild from the committed snapshot. Offline, deterministic, about 15 seconds.**
+## One command rebuilds everything
 ```bash
 pip install -r requirements.txt
-python run.py --offline
+python run.py --offline     # rebuild every chart from the committed raw data (no keys, about 20 s)
+python run.py               # fetch fresh data first (keys optional, see below)
 ```
-You should see each chain's fundamentals, valuation and premium printed, and `docs/data/dashboard.json`,
-`data/processed/*.csv` and `reports/latest.md` regenerated. The report opens with the NEAR verdict.
+You should see a line like `thesis: <start> to <end>, <N> weeks -> hypothesis <RESULT>`. These files are
+regenerated:
+- `docs/data/thesis.json` and `reports/thesis_results.md` (the main thesis);
+- `docs/data/dashboard.json` and `reports/latest.md` (the appendix);
+- the daily and weekly tables in `data/processed/`.
 
-**2. Run the tests.**
-```bash
-python -m unittest discover -s tests -v
-```
-All tests should pass. They cover no look-ahead, the weighting maths, the fair-value maths, the verdict majority
-rule, and the payload shape.
-
-**3. Open the dashboard.**
+Then open the dashboard:
 ```bash
 python -m http.server -d docs 8000
 ```
-Open http://localhost:8000.
-- **At the top:** the verdict and the three checks. Below them, the market cap vs fair-value band chart, the verdict
-  history, the multiples table, the premium and pillar charts, the raw metrics, and the reliability tables.
-- **"Compare with" buttons** (AVAX, THORChain, L1 basket): each adds that peer to a multiples chart and a table.
-- **Pump.fun section:** choose a metric to see NEAR, AVAX and the control group indexed around go-live.
+Open http://localhost:8000. You should see the result box, the data charts (each with an expandable "Query behind
+this chart"), the lead-lag chart (choose a usage measure), and the predictive-test table.
 
-**4. Fetch fresh data. Needs internet, no API keys.**
+Run the tests:
 ```bash
-python run.py
+python -m unittest discover -s tests -v
 ```
-You should see `data/raw/` updated to yesterday (UTC), with all outputs rebuilt.
-
-## How the dashboard stays live
-`.github/workflows/refresh.yml` runs daily at 02:17 UTC, on demand, and on code pushes. Each run:
-1. fetches fresh data;
-2. rebuilds the outputs and runs the tests;
-3. commits the new snapshot;
-4. redeploys `docs/` to GitHub Pages.
-
-The page reads `data/dashboard.json` when it loads, so the verdict, charts and tables follow the data with no code
-change. The Pump.fun window also grows by one day per run. If a source is down, the run falls back to the last
-committed snapshot.
-
-One-time setup: **Settings → Pages → Source: GitHub Actions**.
+All tests should pass. They include a check that the method **detects a real one-week lead in synthetic data and
+doesn't invent one in pure noise**.
 
 ## Data sources
-All public, no keys, so anyone can re-run the pipeline.
+| Data | Source | Key |
+|---|---|---|
+| Daily active accounts, transactions, contract usage, calls to `intents.near` | BigQuery `bigquery-public-data.crypto_near_mainnet_us` (SQL in [`sql/`](sql/), always filtered on `block_date`) | GCP service account |
+| NEAR Intents swaps (1Click), sampled | NEAR Intents Explorer API `explorer.near-intents.org/api/v0/transactions` | `NEAR_INTENTS_JWT` |
+| NEAR Intents daily USD volume, complete | DefiLlama `api.llama.fi/summary/dexs/near-intents` | none |
+| NEAR price; active accounts and transactions when BigQuery is stale | NearBlocks `api.nearblocks.io/v1/charts` | none |
+| BTC price (market control) | DefiLlama coins API | none |
 
-| Data | Source |
-|---|---|
-| NEAR price, market cap, supply, txns, fees, active and new accounts | NearBlocks `api.nearblocks.io/v1/charts` |
-| NEAR total stake (one snapshot per run) | NEAR RPC `validators` |
-| TVL, DEX volume, stablecoins, fees, revenue (NEAR and peers) | DefiLlama |
-| AVAX C-chain activity and staking | Avalanche Data API `metrics.avax.network` |
-| Peer market caps (last 365 days), AVAX supply | CoinGecko public API |
-| AVAX price history | DefiLlama `coins.llama.fi` |
+**Keys.** Copy `.env.example` to `.env`. Without a key, that source's committed data in `data/raw/` is used, so the
+rebuild still works.
+- `NEAR_INTENTS_JWT` comes from the [Partner Dashboard](https://partners.near-intents.org).
+- For BigQuery, use a service account with the *BigQuery Job User* role. Point `GOOGLE_APPLICATION_CREDENTIALS` at
+  its key file, or set `GCP_SA_KEY_B64`. Every query is dry-run first and refused above `BQ_MAX_GB` (default 150 GB).
 
-**Definitions.**
-- **Revenue** is fees burned: 70% of NEAR fees (the other 30% goes to contract developers).
-- **Active accounts** are daily distinct signers.
-- **Returning accounts** are active minus new.
-- **Flows** are 30-day averages, annualised.
+**Two limits that shape the method:**
+1. **BigQuery may be stale.** NEAR Lake, the dataset's source, was deprecated on 2026-03-24. `sql/00_freshness.sql`
+   checks the newest partition. Usage after that date comes from NearBlocks and is labelled as such.
+2. **The Explorer API allows 1 request every 5 seconds.** At about 30,000 swaps a day, a full history would take
+   about 36 hours. So swaps are counted in **2 random UTC hours per day**, seeded by date so the sample is
+   reproducible, and scaled by 24. The sample is cached and resumable, and the daily job tops it up.
+   DefiLlama provides the complete USD series.
 
-**Known limits.**
-- **NEAR stake history** isn't available without an API key, so the pipeline saves one snapshot per run. The
-  staking score joins the index once 180 snapshots exist.
-- **Peer market caps** cover only the last 365 days.
-- **The Pump.fun go-live dates** come from secondary reports, and AVAX's is approximate.
-- **No protocol buyback** exists on NEAR, so burn is the only supply sink measured.
-
-**Why not Dune?** Dune has good NEAR tables, but running queries needs an API key and credits. Judges need to be able
-to re-run this, so every input comes from keyless APIs.
+## How the test works
+- **Weekly log growth, not levels.** Shared long-run trends can't create a fake relationship.
+- **Three tests, fixed before looking at results:**
+  1. lead-lag correlation, 0–8 weeks ahead;
+  2. an in-sample F-test: do 2 weekly lags of the predictor add information beyond usage's own lags and BTC?
+  3. next-week forecasts on an expanding window, compared with a baseline without the predictor.
+- **Verdict rule:** Intents wins a usage measure only if it passes test 2, improves test 3, and beats price on
+  test 3. The rule is coded in [`pipeline/hypothesis.py`](pipeline/hypothesis.py).
 
 ## Repository layout
 ```
-run.py                     CLI: fetch + build (or --offline)
-pipeline/sources.py        one fetcher per source -> data/raw/*.csv
-pipeline/build.py          panels, percentile scores, pillars, Fundamentals/Valuation indices, premium
-pipeline/valuation.py      NEAR-only: fair value, multiples vs history, verdict
-pipeline/compare.py        optional: peer multiples, growth, Pump.fun event study
-pipeline/report.py         renders reports/latest.md
-data/raw/                  committed source snapshot (refreshed daily by CI)
-data/processed/            daily panels, NEAR valuation series
-docs/index.html            dashboard (Plotly), reads docs/data/dashboard.json
-THESIS.md  AGENT.md  LICENSE  tests/
+run.py                    one command: fetch (optional) + rebuild everything
+sql/                      BigQuery SQL (freshness, daily activity, contract usage)
+pipeline/bq.py            runs sql/ with dry-run cost guard, incremental cache
+pipeline/intents.py       Explorer API hour sampler (rate-limited, resumable)
+pipeline/sources.py       NearBlocks, DefiLlama, BTC, and appendix sources
+pipeline/hypothesis.py    weekly growth, lead-lag, predictive and out-of-sample tests, verdict rule
+pipeline/thesis.py        builds docs/data/thesis.json (charts + queries + sentences) and reports/thesis_results.md
+pipeline/build.py, valuation.py, report.py   appendix: valuation check
+docs/index.html           dashboard (main thesis);  docs/valuation.html  appendix
+data/raw/                 committed raw data (refreshed daily by GitHub Actions)
+tests/                    unittest suite
 ```
 
+## How it stays current
+`.github/workflows/refresh.yml` runs daily. It fetches fresh data with the `NEAR_INTENTS_JWT` and `GCP_SA_KEY_JSON`
+repository secrets, rebuilds, tests, commits the new data and redeploys `docs/` to GitHub Pages.
+
+One-time setup: **Settings → Pages → Source: GitHub Actions**.
+
 ## Hackathon disclosure
-- Built during the NEAR HACKATHON window (all commits are from November 2026). This is a new repository with no pre-hackathon code.
-- Libraries: pandas, numpy, requests (Python), and plotly.js 2.34 loaded from cdnjs.
+- Built during the NEAR HACKATHON window (all commits are from November 2026). This is a new repository with no
+  pre-hackathon code.
+- Libraries: pandas, numpy, scipy, statsmodels, requests and google-cloud-bigquery (Python), and plotly.js 2.34
+  loaded from cdnjs.
 - AI assistance: developed with Claude Code.
 - License: [MIT](LICENSE).
 

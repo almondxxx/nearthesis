@@ -167,25 +167,4 @@ def write_report(d: dict, path: Path) -> None:
         "so NEAR's staking score starts once enough snapshots accrue.",
         "",
     ]
-    C, E = d.get("compare"), d.get("event_study")
-    if C:
-        lines += ["## Optional: NEAR multiples vs peers (latest)", "",
-                  "| Multiple | NEAR | AVAX | THORChain | L1 basket median |", "|---|---:|---:|---:|---:|"]
-        for k in ["mc_to_revenue", "mc_to_dex_volume", "mc_to_tvl", "mc_to_stablecoins", "mc_to_returning_accounts"]:
-            f = _usd if k == "mc_to_returning_accounts" else _x
-            lines.append(f"| {k} | " + " | ".join(f(C["latest"][p].get(k)) for p in ["near", "avax", "thorchain", "basket"]) + " |")
-        lines += ["", "| YoY (30d vs same 30d last year) | NEAR | AVAX | THORChain | L1 basket median |", "|---|---:|---:|---:|---:|"]
-        for k in ["tvl_usd", "dex_volume_usd", "fees_usd", "revenue_usd", "stablecoins_usd"]:
-            lines.append(f"| {k} | " + " | ".join(_pct(C["growth"][p].get(k), True) for p in ["near", "avax", "thorchain", "basket"]) + " |")
-        lines.append("")
-    if E:
-        lines += [f"## Pump.fun integration event study ({E['post_days']} days after go-live)", "",
-                  "Average change vs each chain's 14 days before go-live. NEAR go-live 2026-11-04; AVAX 2026-11-05 (approximate); "
-                  "control = median of Sui, Aptos, TON, ICP, Cardano (DefiLlama metrics only). Descriptive, not causal.", "",
-                  "| | Active accounts | Transactions | Fees | DEX volume |", "|---|---:|---:|---:|---:|"]
-        for k in ["near", "avax", "control"]:
-            sm = E["summary"].get(k, {})
-            cell = lambda c: "n/a" if sm.get(c) is None else f"{sm[c]:+.1f}%"
-            lines.append(f"| {k.upper()} | {cell('active_accounts')} | {cell('txns')} | {cell('fees_usd')} | {cell('dex_volume_usd')} |")
-        lines.append("")
     path.write_text("\n".join(lines))

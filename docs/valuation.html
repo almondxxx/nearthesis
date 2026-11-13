@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEAR Valuation Appendix</title>
+<meta name="description" content="Is NEAR undervalued or overvalued? Three checks against NEAR's own on-chain fundamentals, refreshed daily from public data.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.34.0/plotly.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f5f2; --surface: #fcfcfb; --border: #e3e1db; --grid: #ecebe6;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #7a7973;
+  --near: #2a78d6; --peer: #eb6834; --control: #1baf7a; --fund: #0b0b0b; --band: rgba(42,120,214,0.14);
+  --p-network: #1baf7a; --p-defi: #6250d6; --p-tokenomics: #e87ba4;
+  --over: #b8401c; --under: #1c7a52; --fair: #52514e; --zero: #9a9890;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --border: #2e2d2b; --grid: #272624;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8e8d86;
+    --near: #3987e5; --peer: #d95926; --control: #199e70; --fund: #f0efec; --band: rgba(57,135,229,0.20);
+    --p-network: #199e70; --p-defi: #9085e9; --p-tokenomics: #d55181;
+    --over: #e8845a; --under: #4cc495; --fair: #c3c2b7; --zero: #6b6a64;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --border: #2e2d2b; --grid: #272624;
+  --text: #f0efec; --text-2: #c3c2b7; --text-3: #8e8d86;
+  --near: #3987e5; --peer: #d95926; --control: #199e70; --fund: #f0efec; --band: rgba(57,135,229,0.20);
+  --p-network: #199e70; --p-defi: #9085e9; --p-tokenomics: #d55181;
+  --over: #e8845a; --under: #4cc495; --fair: #c3c2b7; --zero: #6b6a64;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
+header h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
+header p { margin: 0 0 6px; color: var(--text-2); max-width: 760px; }
+.meta { font-size: 13px; color: var(--text-3); display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; }
+a { color: var(--near); }
+h2 { font-size: 18px; margin: 40px 0 4px; }
+h2.part { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-top: 56px; border-top: 1px solid var(--border); padding-top: 24px; }
+.lede { color: var(--text-2); margin: 0 0 14px; max-width: 780px; font-size: 14px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.hero { margin-top: 24px; display: grid; grid-template-columns: 1.1fr 2fr; gap: 12px; }
+.verdict .k { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.verdict .v { font-size: 34px; font-weight: 700; line-height: 1.15; margin: 4px 0 8px; }
+.verdict .s { font-size: 14px; color: var(--text-2); }
+.signals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.sig .t { font-size: 12px; color: var(--text-3); }
+.sig .r { font-size: 15px; font-weight: 600; margin: 2px 0 6px; display: flex; align-items: center; gap: 6px; }
+.sig .n { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sig .d { font-size: 12.5px; color: var(--text-2); margin-top: 4px; }
+.badge { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: 0.04em; }
+.over { color: var(--over); } .under { color: var(--under); } .fair { color: var(--fair); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.chart { width: 100%; height: 340px; }
+.chart.sm { height: 280px; }
+.ctitle { font-size: 13px; font-weight: 600; margin: 0 0 4px; color: var(--text-2); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; color: var(--text-2); }
+select, button { font: inherit; font-size: 13px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+button[aria-pressed="true"] { border-color: var(--text-2); font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-3); font-weight: 600; }
+.tablewrap { overflow-x: auto; }
+.method { font-size: 14px; color: var(--text-2); }
+.method code { font-size: 12.5px; }
+.err { color: var(--over); }
+.note { font-size: 12.5px; color: var(--text-3); margin-top: 8px; }
+@media (max-width: 760px) {
+  .hero, .grid2, .signals { grid-template-columns: 1fr; }
+  header h1 { font-size: 23px; }
+  .verdict .v { font-size: 28px; }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Appendix: is NEAR undervalued or overvalued?</h1>
+  <p>Three independent checks of NEAR's market cap against NEAR's own on-chain fundamentals: usage, DeFi and tokenomics. Appendix to the main thesis on <a href="index.html">NEAR Intents and network usage</a>.</p>
+  <div class="meta">
+    <span id="asof">Loading data…</span>
+    <span>Refreshed daily by GitHub Actions</span>
+    <a href="index.html">Main thesis</a>
+    <a href="https://github.com/almondxxx/nearthesis">Source &amp; method</a>
+    <a href="data/dashboard.json">Raw JSON</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="card verdict" id="verdict"></div>
+  <div class="card signals" id="signals"></div>
+</section>
+
+<h2>Market cap vs fair value</h2>
+<p class="lede">Fair value is what NEAR would be worth at its usual multiples on today's fundamentals. For each of revenue, DEX volume, TVL, stablecoins and returning accounts, today's figure is multiplied by NEAR's median multiple over the trailing 2 years. The fair value is the geometric mean of the five results. The band uses the 25th to 75th percentile multiples.</p>
+<div class="card"><div id="c-fv" class="chart"></div></div>
+
+<h2>Valuation verdict over time</h2>
+<p class="lede">The verdict each day, from a majority vote of the three checks. It shows how often NEAR has looked rich or cheap against its own history.</p>
+<div class="card"><div id="c-verdict" class="chart sm"></div></div>
+
+<h2>Multiples vs NEAR's own history</h2>
+<p class="lede">Today's multiple, its 2-year median, and where today ranks in the last 2 years (0 = cheapest, 100 = richest). The "Fair value" column is the market cap that multiple implies at its median.</p>
+<div class="card tablewrap"><table id="mtable"></table></div>
+
+<h2>Confidence Premium</h2>
+<p class="lede">Valuation Index (market-cap percentile) minus Fundamentals Index (network, DeFi and tokenomics percentiles), both against NEAR's trailing 365 days. Above 0, investors are paying ahead of fundamentals.</p>
+<div class="grid2">
+  <div class="card"><p class="ctitle">Confidence Premium</p><div id="c-premium" class="chart sm"></div></div>
+  <div class="card"><p class="ctitle">Fundamentals vs Valuation</p><div id="c-fv-idx" class="chart sm"></div></div>
+</div>
+
+<h2>What drives the fundamentals</h2>
+<p class="lede">Network: active accounts, returning accounts, transactions, fees. DeFi: TVL, DEX volume, stablecoin supply. Tokenomics: staked share, net supply growth (lower scores higher), and the share of issuance offset by fee burn.</p>
+<div class="card"><div id="c-pillars" class="chart"></div></div>
+
+<h2>NEAR's raw metrics</h2>
+<p class="lede">Every input, as a 7-day average.</p>
+<div class="card">
+  <div class="controls">
+    <label>Metric <select id="metric"></select></label>
+    <button id="logbtn" aria-pressed="true">Log scale</button>
+  </div>
+  <div id="c-metric" class="chart"></div>
+</div>
+
+<h2>How reliable are these readings?</h2>
+<p class="lede">First, the Confidence Premium recomputed under 2,000 random weightings. Second, price change over the 90 days after each reading. The second is descriptive only: the windows overlap and cover a single two-year regime, so it isn't a trading signal.</p>
+<div class="grid2">
+  <div class="card tablewrap"><p class="ctitle">Premium under random weights</p><table id="sens"></table></div>
+  <div class="card tablewrap"><p class="ctitle">90-day forward price change</p><table id="bt"></table></div>
+</div>
+
+<h2>Method and sources</h2>
+<div class="card method">
+  <p><b>Verdict.</b> Majority of three checks. <i>Fair value</i>: market cap above the fair-value band counts as overvalued, below it as undervalued. <i>Confidence Premium</i>: +15 or more is overvalued, −15 or less is undervalued. <i>Multiples vs history</i>: a median percentile of 75 or more is overvalued, 25 or less is undervalued. If no two checks agree, the verdict is "Mixed".</p>
+  <p><b>No look-ahead.</b> Every score, band and percentile uses only data up to that day. The fair value and multiple ranks use a trailing 2-year window (at least 1 year); the index scores use a trailing 365-day window.</p>
+  <p><b>Definitions.</b> Revenue = fees burned: 70% of NEAR fees burn, and the other 30% goes to contract developers. Active accounts = daily distinct signers. Returning accounts = active minus new. Flows such as revenue and DEX volume are 30-day averages, annualised.</p>
+  <p><b>Sources (all public, no API keys).</b> NEAR: <a href="https://api.nearblocks.io/v1/charts">NearBlocks</a> and NEAR RPC for stake. DeFi data: <a href="https://defillama.com">DefiLlama</a>.</p>
+  <p><b>Known limits.</b> NEAR stake history isn't available without a key, so the pipeline saves one stake snapshot per run; the staking score joins the index after 180 snapshots. NEAR has no protocol buyback, so burn is the only supply sink measured.</p>
+</div>
+</main>
+
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  let D = null, logScale = true;
+
+  const fmtUsd = (v) => v == null ? "n/a" : (Math.abs(v) >= 1e9 ? "$" + (v / 1e9).toFixed(2) + "B" :
+    Math.abs(v) >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : Math.abs(v) >= 1e3 ? "$" + (v / 1e3).toFixed(1) + "K" : "$" + v.toFixed(2));
+  const fmtX = (v) => v == null ? "n/a" : (Math.abs(v) < 1 ? v.toFixed(3) : Math.abs(v) < 10 ? v.toFixed(2) : Math.round(v).toLocaleString()) + "×";
+  const fmtPct = (v, s) => v == null ? "n/a" : (s && v > 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+  const fmtS = (v) => v == null ? "n/a" : (v > 0 ? "+" : "") + v.toFixed(1);
+  const cls = (s) => s === "overvalued" || s === "Overvalued" ? "over" : (s === "undervalued" || s === "Undervalued" ? "under" : "fair");
+  const MULT_LABEL = { mc_to_revenue: "Market cap / revenue", mc_to_dex_volume: "Market cap / DEX volume",
+    mc_to_tvl: "Market cap / TVL", mc_to_stablecoins: "Market cap / stablecoins", mc_to_returning_accounts: "Market cap per returning account" };
+  const MULT_USD = new Set(["mc_to_returning_accounts"]);
+
+  function layout(extra) {
+    return Object.assign({
+      margin: { l: 56, r: 12, t: 8, b: 32 },
+      paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+      font: { family: "ui-sans-serif, system-ui, sans-serif", size: 12, color: css("--text-2") },
+      hovermode: "x unified",
+      hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--border"), font: { color: css("--text") } },
+      legend: { orientation: "h", y: 1.14, x: 0, font: { color: css("--text-2") } },
+      xaxis: { gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false },
+      yaxis: { gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false },
+    }, extra || {});
+  }
+  const yax = (extra) => Object.assign({ gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false }, extra || {});
+  const cfg = { displayModeBar: false, responsive: true };
+  const line = (name, y, color, extra, x) => Object.assign({ type: "scatter", mode: "lines", name, x: x || D.dates, y,
+    line: { color, width: 2 }, connectgaps: false }, extra || {});
+  const hline = (y) => ({ type: "line", xref: "paper", x0: 0, x1: 1, y0: y, y1: y, line: { color: css("--zero"), width: 1, dash: "dot" } });
+
+  function hero() {
+    const N = D.near, S = N.signals;
+    const gap = N.fair_value_gap;
+    $("#verdict").innerHTML = `<div class="k">NEAR verdict · ${N.as_of}</div>
+      <div class="v ${cls(N.verdict)}">${N.verdict}</div>
+      <div class="s">Market cap <b>${fmtUsd(N.market_cap_usd)}</b> ($${N.price_usd.toFixed(2)}) against a fair value of <b>${fmtUsd(N.fair_value_mid)}</b> ($${N.implied_price_mid.toFixed(2)}).
+      Fair-value band ${fmtUsd(N.fair_value_low)} to ${fmtUsd(N.fair_value_high)}. Market cap is ${fmtPct(Math.abs(gap))} ${gap >= 0 ? "above" : "below"} the midpoint.</div>`;
+    const sig = (title, s, num, desc) => `<div class="sig"><div class="t">${title}</div>
+      <div class="r ${cls(s)}"><span class="badge">${s}</span></div><div class="n">${num}</div><div class="d">${desc}</div></div>`;
+    $("#signals").innerHTML =
+      sig("1 · Fair value", S.fair_value, fmtPct(gap, true) + " vs midpoint", "Market cap is " +
+        (N.market_cap_usd > N.fair_value_high ? "above" : N.market_cap_usd < N.fair_value_low ? "below" : "inside") +
+        " the fair-value band. Only a reading outside the band counts as over- or undervalued.") +
+      sig("2 · Confidence Premium", S.confidence_premium, fmtS(N.premium), "Valuation percentile minus fundamentals percentile, 365-day window. ±15 is the cut-off.") +
+      sig("3 · Multiples vs history", S.multiples_vs_history, Math.round(N.multiples_percentile) + "/100", "Median rank of today's five multiples in the last 2 years. 75 or more is rich, 25 or less is cheap.");
+  }
+
+  function fvChart() {
+    const s = D.near.series;
+    Plotly.react("c-fv", [
+      line("Band low", s.fair_value_low, "rgba(0,0,0,0)", { showlegend: false, hoverinfo: "skip" }),
+      line("Fair-value band (25–75th pct multiples)", s.fair_value_high, "rgba(0,0,0,0)", { fill: "tonexty", fillcolor: css("--band"), hoverinfo: "skip" }),
+      line("Fair value", s.fair_value_mid, css("--near"), { line: { color: css("--near"), width: 2, dash: "dash" } }),
+      line("Market cap", s.market_cap_usd, css("--fund")),
+    ], layout({ yaxis: yax({ type: "log", tickformat: "$~s", dtick: "D2", hoverformat: "$,.3~s" }) }), cfg);
+  }
+
+  function verdictChart() {
+    const v = D.near.series.verdict, map = { Undervalued: -1, "Fairly valued": 0, Mixed: 0, Overvalued: 1 };
+    const y = v.map((x) => x == null ? null : map[x]);
+    const colors = v.map((x) => x == null ? "rgba(0,0,0,0)" : css("--" + cls(x)));
+    Plotly.react("c-verdict", [{ type: "bar", x: D.dates, y: y.map((k) => k == null ? null : 1), base: y.map((k) => k == null ? null : k - 0.5),
+      marker: { color: colors }, text: v, hovertemplate: "%{x}<br>%{text}<extra></extra>", showlegend: false }],
+      layout({ bargap: 0, hovermode: "closest", yaxis: yax({ tickvals: [-1, 0, 1], ticktext: ["Undervalued", "Fair / mixed", "Overvalued"], range: [-1.6, 1.6], fixedrange: true }), margin: { l: 96, r: 12, t: 8, b: 32 } }), cfg);
+  }
+
+  function mTable() {
+    $("#mtable").innerHTML = "<thead><tr><th>Multiple</th><th>Today</th><th>2-year median</th><th>Rank (0–100)</th><th>Fair value at median</th></tr></thead><tbody>" +
+      D.near.multiples.map((m) => {
+        const f = MULT_USD.has(m.key) ? fmtUsd : fmtX;
+        const r = m.percentile_2y, c = r == null ? "" : (r >= 75 ? "over" : r <= 25 ? "under" : "");
+        return `<tr><td>${m.label}</td><td>${f(m.today)}</td><td>${f(m.median_2y)}</td><td class="${c}">${r == null ? "n/a" : r.toFixed(0)}</td><td>${fmtUsd(m.fair_value)}</td></tr>`;
+      }).join("") + `<tr><td><b>Combined (geometric mean)</b></td><td>${fmtUsd(D.near.market_cap_usd)}</td><td></td><td><b>${Math.round(D.near.multiples_percentile)}</b></td><td><b>${fmtUsd(D.near.fair_value_mid)}</b></td></tr></tbody>`;
+  }
+
+  function idxCharts() {
+    const I = D.series.near.index;
+    Plotly.react("c-premium", [line("NEAR", I.confidence_premium, css("--near"))],
+      layout({ showlegend: false, shapes: [hline(15), hline(-15), hline(0)], yaxis: yax({ range: [-100, 100] }) }), cfg);
+    Plotly.react("c-fv-idx", [
+      line("Fundamentals", I.fundamentals, css("--fund")),
+      line("Valuation", I.valuation, css("--near"), { line: { color: css("--near"), width: 2, dash: "dash" } }),
+    ], layout({ yaxis: yax({ range: [0, 100] }) }), cfg);
+    Plotly.react("c-pillars", [
+      line("Network", I.network, css("--p-network")),
+      line("DeFi", I.defi, css("--p-defi")),
+      line("Tokenomics", I.tokenomics, css("--p-tokenomics")),
+      line("Fundamentals", I.fundamentals, css("--fund"), { line: { color: css("--fund"), width: 2.5 } }),
+    ], layout({ yaxis: yax({ range: [0, 100] }) }), cfg);
+  }
+
+  const RATIO = new Set(["retention_ratio", "staking_ratio", "net_issuance_ann", "burn_offset"]);
+  function metric() {
+    const m = $("#metric").value, isRatio = RATIO.has(m);
+    const ylog = logScale && !isRatio;
+    Plotly.react("c-metric", [line("NEAR", D.series.near.metrics[m], css("--near"))],
+      layout({ showlegend: false, yaxis: yax({ type: ylog ? "log" : "linear", dtick: ylog ? "D2" : undefined,
+        tickformat: isRatio ? ".1%" : (m.endsWith("_usd") ? "$~s" : "~s"), hoverformat: isRatio ? ".2%" : ",.3~s" }) }), cfg);
+  }
+
+  function relTables() {
+    const R = D.sensitivity.near;
+    $("#sens").innerHTML = "<thead><tr><th></th><th>Median</th><th>5th pct</th><th>95th pct</th><th>Below 0</th></tr></thead><tbody>" +
+      `<tr><td>NEAR premium</td><td>${fmtS(R.median)}</td><td>${fmtS(R.p05)}</td><td>${fmtS(R.p95)}</td><td>${(R.share_negative * 100).toFixed(0)}%</td></tr></tbody>`;
+    const rows = D.near.backtest.concat(D.backtest.rows.near);
+    $("#bt").innerHTML = "<thead><tr><th>After…</th><th>Days</th><th>Median</th><th>Positive</th></tr></thead><tbody>" +
+      rows.map((r) => `<tr><td>${r.bucket}</td><td>${r.days}</td><td>${fmtPct(r.median, true)}</td><td>${fmtPct(r.hit_rate)}</td></tr>`).join("") + "</tbody>";
+  }
+
+  function renderAll() { hero(); fvChart(); verdictChart(); mTable(); idxCharts(); metric(); relTables(); }
+
+  fetch("data/dashboard.json", { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then((d) => {
+    D = d;
+    $("#asof").textContent = `Data as of ${d.meta.as_of} · built ${d.meta.built_at.replace("T", " ").replace("Z", " UTC")}`;
+    const order = ["active_accounts", "returning_accounts", "retention_ratio", "txns", "fees_usd", "revenue_usd", "tvl_usd",
+      "dex_volume_usd", "stablecoins_usd", "staking_ratio", "net_issuance_ann", "burn_offset", "market_cap_usd", "price_usd"];
+    $("#metric").innerHTML = order.map((k) => `<option value="${k}">${d.meta.labels[k] || k}</option>`).join("");
+        $("#metric").onchange = metric;
+    $("#logbtn").onclick = (e) => { logScale = !logScale; e.target.setAttribute("aria-pressed", logScale); metric(); };
+    renderAll();
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+  }).catch((e) => { $("#asof").innerHTML = `<span class="err">Could not load data/dashboard.json (${e.message}). Run <code>python run.py</code>, then serve <code>docs/</code>.</span>`; });
+})();
+</script>
+</body>
+</html>

@@ -311,7 +311,6 @@ def build() -> dict:
 
     # NEAR on its own: fair value, multiples vs history, verdict.
     from pipeline.valuation import near_standalone, fv_backtest, verdict_series
-    from pipeline import compare as C
     nv = near_standalone(panels["near"], indices["near"]["confidence_premium"])
     fv, mpct = nv.pop("_fv"), nv.pop("_mpct")
     vseries = verdict_series(fv, indices["near"]["confidence_premium"], mpct["median"])
@@ -352,13 +351,6 @@ def build() -> dict:
         "multiples_percentile": _round(mpw["median"], 1),
         "verdict": [None if pd.isna(v) else v for v in vsw],
     }
-
-    peer_raw = pd.read_csv(RAW / "peers.csv", parse_dates=["date"], index_col="date") if (RAW / "peers.csv").exists() else None
-    compare_out, event_out = None, None
-    if peer_raw is not None:
-        pp = C.peer_panels(peer_raw, panels["avax"])
-        compare_out = C.comparison(panels["near"], pp, dates)
-        event_out = C.event_study(panels["near"], pp)
     latest = {c: {k: (None if pd.isna(v) else round(float(v), 1)) for k, v in indices[c].loc[end].items()} for c in panels}
 
     out = {
@@ -374,8 +366,6 @@ def build() -> dict:
         "dates": [d.strftime("%Y-%m-%d") for d in dates],
         "series": series,
         "near": nv,
-        "compare": compare_out,
-        "event_study": event_out,
         "latest": latest,
         "snapshot": snaps,
         "sensitivity": sens,

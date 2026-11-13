@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   workflow_dispatch:
   push:
-    paths: ["pipeline/**", "docs/**", "run.py", "requirements.txt", ".github/workflows/refresh.yml"]
+    paths: ["pipeline/**", "sql/**", "docs/**", "run.py", "requirements.txt", ".github/workflows/refresh.yml"]
 
 permissions:
   contents: write
@@ -30,7 +30,10 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Fetch and build (falls back to the committed snapshot if a source is down)
-        run: python run.py || python run.py --offline
+        env:
+          NEAR_INTENTS_JWT: ${{ secrets.NEAR_INTENTS_JWT }}
+          GCP_SA_KEY_JSON: ${{ secrets.GCP_SA_KEY_JSON }}
+        run: python run.py --intents-minutes 30 || python run.py --offline
 
       - name: Tests
         run: python -m unittest discover -s tests -v

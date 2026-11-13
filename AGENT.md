@@ -1,69 +1,49 @@
 # AGENT.md
 
-Instructions for AI coding agents (Claude Code, Codex and others) that review, run or extend this repo.
+Instructions for AI agents (Claude Code, Codex and others) that review, run or extend this repo.
 
 ## What this repo is
-A re-runnable model that answers **"is NEAR undervalued or overvalued?"** from NEAR's own data. Three checks feed a
-majority verdict:
-1. fair value at NEAR's median 2-year multiples (`pipeline/valuation.py`);
-2. the Confidence Premium, Valuation Index minus Fundamentals Index (`pipeline/build.py`);
-3. multiples ranked against NEAR's own 2-year history.
-
-Peer comparisons (AVAX, THORChain, an L1 basket median) and a Pump.fun event study are optional context in
-`pipeline/compare.py`. **They must never feed the NEAR verdict.** A static dashboard (`docs/`) renders everything.
+An evidence-first test of one hypothesis: **"cross-chain volume through NEAR Intents is a better leading indicator
+of real NEAR network usage than the NEAR token price."** The result can be SUPPORTED, REJECTED, NOT SUPPORTED or
+MIXED, decided by a rule coded in `pipeline/hypothesis.py` before any results were seen. A separate appendix
+(`docs/valuation.html`, `pipeline/build.py` + `valuation.py`) checks NEAR's valuation against its own history.
 
 ## Verify it in about 2 minutes
 ```bash
 pip install -r requirements.txt
-python run.py --offline                       # rebuild from committed data/raw/; no network needed
+python run.py --offline                       # rebuild from committed data/raw/, no keys, no network
 python -m unittest discover -s tests -v       # all tests should pass
 python -m http.server -d docs 8000            # open http://localhost:8000
 ```
-`python run.py` (without `--offline`) fetches fresh data first. It needs network access to api.nearblocks.io,
-metrics.avax.network, api.llama.fi, coins.llama.fi, stablecoins.llama.fi, api.coingecko.com and rpc.mainnet.near.org.
-
-Expected: `run.py` prints both chains' fundamentals, valuation and premium, and writes
-`docs/data/dashboard.json` and `reports/latest.md`. The report opens with the NEAR verdict. Every figure in `THESIS.md` can be traced to
-`data/processed/{near,avax}_daily.csv` or `reports/latest.md` at the same snapshot date.
+Expected output includes `thesis: ... weeks -> hypothesis <RESULT>`. The result and every number in `THESIS.md`
+must match `reports/thesis_results.md` at the snapshot date stated at the top of `THESIS.md`.
 
 ## Layout
 | Path | Role | Edit by hand? |
 |---|---|---|
-| `pipeline/sources.py` | One fetcher per source, writes `data/raw/*.csv` | yes |
-| `pipeline/build.py` | Panels, scoring, indices, sensitivity; writes outputs | yes |
-| `pipeline/valuation.py` | NEAR-only fair value, multiples percentiles, verdict, fair-value backtest | yes |
-| `pipeline/compare.py` | Optional peers (AVAX, THORChain, L1 basket) and Pump.fun event study | yes |
-| `pipeline/report.py` | Renders `reports/latest.md` | yes |
-| `run.py` | CLI entry point | yes |
-| `docs/index.html` | Dashboard; reads `docs/data/dashboard.json` at load time | yes |
-| `data/raw/` | Committed source snapshot (also refreshed daily by CI) | **no**, except by fetchers |
-| `data/raw/near_staking_snapshots.csv` | Append-only NEAR stake history, one row per run | **never rewrite history** |
-| `data/processed/`, `docs/data/`, `reports/latest.md` | Generated | **no** |
-| `THESIS.md` | Human-written conclusion, pinned to a snapshot date | yes, keep the numbers in sync |
-| `.github/workflows/refresh.yml` | Daily fetch, build, test, commit, Pages deploy | yes |
+| `sql/*.sql` | BigQuery queries; every one filters on `block_date` | yes |
+| `pipeline/bq.py` | Runs `sql/`, dry-run cost guard (`BQ_MAX_GB`), incremental cache | yes |
+| `pipeline/intents.py` | Explorer API hour sampler: 1 request / 5 s, resumable | yes |
+| `pipeline/hypothesis.py` | Weekly growth, lead-lag, F-test, out-of-sample, **verdict rule** | only with a stated reason; the rule is pre-registered |
+| `pipeline/thesis.py` | Charts (data + query + computed sentence) and report | yes |
+| `data/raw/intents_hour_samples.csv` | Append-only sample cache | **never rewrite or edit rows** |
+| `data/raw/bq_*.csv` | BigQuery results cache | **no**, regenerate with `run.py` |
+| `data/processed/`, `docs/data/`, `reports/` | Generated | **no** |
+| `THESIS.md` | Human-written conclusion pinned to a snapshot date | yes, keep the numbers in sync |
 
 ## Invariants: don't break these
-- **No look-ahead.** Scores use `rolling_pct`, which only sees the trailing window. `test_no_lookahead` checks this.
-- **No API keys or secrets** in the repo or the pipeline. Every source must stay public and keyless so anyone can re-run it.
-- **Deterministic builds.** Same `data/raw/` gives the same outputs (the sensitivity analysis uses a fixed seed).
-- **Like-for-like definitions.** Revenue = fees burned (NEAR 70%, AVAX C-chain 100%). Active accounts = daily signers.
-  AVAX = C-chain only. If you change a definition, update `LABELS`, the dashboard method section and `THESIS.md`.
-- **Don't invent data.** Leave unknown values as NaN or `null`. Never fill a series with made-up numbers. The one
-  estimate (AVAX circulating supply before CoinGecko's 365-day window) is flagged as `supply_estimated` and is used only for market cap.
-- **The NEAR verdict is standalone.** Nothing from `compare.py` may change `near.verdict`.
-- **Pump.fun dates** live in `compare.PUMPFUN`. The AVAX date is flagged approximate; update it, with a source, if an exact date is confirmed.
-- Dashboard: one y-axis per chart, NEAR is always blue and the selected peer always orange, and the page must work at 390px width.
+- **Never invent numbers.** Sentences on the dashboard are computed from data in `pipeline/thesis.py`. A metric whose
+  source is unavailable is shown as "Not computed", never estimated or filled in.
+- **No secrets in the repo.** `NEAR_INTENTS_JWT` and the GCP key come from the environment or `.env`, which is git-ignored.
+- **BigQuery cost:** every query keeps its `block_date` filter and passes the dry-run cap.
+- **Explorer rate limit:** keep `MIN_GAP` ≥ 5 s. If the API changes and a page repeats, the sampler must stop with an
+  error, never loop. (A known quirk: sending an empty `lastDepositMemo` repeats the page.)
+- **Label sources.** If BigQuery is stale, usage comes from NearBlocks and the target names say so. Don't join
+  BigQuery and NearBlocks into one series; their definitions differ.
+- **No look-ahead** in the out-of-sample test: each forecast uses only earlier weeks.
 
-## Add a metric
-1. Fetch it in `pipeline/sources.py` (in the right `*_llama`, `near_*` or `avax_*` frame) and confirm it lands in `data/raw/`.
-2. Derive it per chain in `near_panel()` / `avax_panel()` in `pipeline/build.py`.
-3. Register it in `METRICS` as `(pillar, higher_is_better, log_transform)` and in `LABELS`.
-4. Add it to the metric list in `docs/index.html` (and `ROWS` in `report.py` if it belongs in the snapshot).
-5. Run `python run.py --offline && python -m unittest discover -s tests`.
-
-## Reviewer checklist (hackathon screening)
-- [ ] `python run.py --offline` succeeds and prints both chains' indices.
-- [ ] Tests pass.
-- [ ] The dashboard loads with no console errors. It shows the NEAR verdict with three signals and the fair-value chart. The "Compare with" buttons show peers.
-- [ ] `THESIS.md` numbers match `reports/latest.md` for the snapshot date stated at the top.
-- [ ] Every data source in the README is public and needs no key.
+## Reviewer checklist
+- [ ] `python run.py --offline` succeeds and prints the hypothesis result.
+- [ ] Tests pass, including `HypothesisTest.test_detects_a_real_lead` and `test_does_not_invent_a_lead`.
+- [ ] The dashboard loads with no console errors. Every chart has a "Query behind this chart" panel and one sentence.
+- [ ] `THESIS.md` lists evidence for, evidence against, what would change the author's mind, and what can't be computed.

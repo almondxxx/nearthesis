@@ -99,31 +99,3 @@ Overlapping windows over a single two-year regime: read this as a description, n
 | YoY market cap | +97.0% | -51.4% |  |
 
 Notes: AVAX figures are the C-chain (Avalanche L1s excluded). Active accounts = daily distinct signers (NEAR: NearBlocks; AVAX: `activeSenders`). Revenue = fees burned: 70% of NEAR fees (30% go to contract developers), 100% of AVAX C-chain fees. AVAX FDV uses today's total supply. NEAR staking history is collected one snapshot per run (1 so far), so NEAR's staking score starts once enough snapshots accrue.
-
-## Optional: NEAR multiples vs peers (latest)
-
-| Multiple | NEAR | AVAX | THORChain | L1 basket median |
-|---|---:|---:|---:|---:|
-| mc_to_revenue | 4,201.9x | 909.6x | 869.0x | 4,557.2x |
-| mc_to_dex_volume | 0.10x | 0.12x | 0.01x | 1.57x |
-| mc_to_tvl | 23.0x | 6.53x | 5.75x | 42.5x |
-| mc_to_stablecoins | 36.4x | 4.09x | n/a | 6.03x |
-| mc_to_returning_accounts | $86.56K | $85.49K | n/a | n/a |
-
-| YoY (30d vs same 30d last year) | NEAR | AVAX | THORChain | L1 basket median |
-|---|---:|---:|---:|---:|
-| tvl_usd | +39.0% | -67.1% | -45.5% | -70.6% |
-| dex_volume_usd | +14.5% | -72.1% | +192.4% | -74.0% |
-| fees_usd | -42.0% | -55.5% | +14.7% | -62.1% |
-| revenue_usd | -42.0% | -55.5% | +14.7% | -66.6% |
-| stablecoins_usd | -40.6% | -50.5% | n/a | -26.6% |
-
-## Pump.fun integration event study (8 days after go-live)
-
-Average change vs each chain's 14 days before go-live. NEAR go-live 2026-11-04; AVAX 2026-11-05 (approximate); control = median of Sui, Aptos, TON, ICP, Cardano (DefiLlama metrics only). Descriptive, not causal.
-
-| | Active accounts | Transactions | Fees | DEX volume |
-|---|---:|---:|---:|---:|
-| NEAR | +73.7% | +37.3% | -8.2% | +9.8% |
-| AVAX | -1.3% | +12.8% | +25.4% | -1.3% |
-| CONTROL | n/a | n/a | -6.7% | +9.7% |

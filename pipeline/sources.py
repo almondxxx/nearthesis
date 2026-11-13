@@ -205,36 +205,30 @@ def llama_chain(name: str, slug: str) -> pd.DataFrame:
     return df[df.index >= START].sort_index()
 
 
-# Optional comparison set. AVAX has its own full panel; these use DefiLlama
-# plus CoinGecko's keyless 365-day market-cap history.
-PEERS = {
-    # key: (DefiLlama chain name, DefiLlama slug, CoinGecko id)
-    "thorchain": ("Thorchain", "thorchain", "thorchain"),
-    "sui": ("Sui", "sui", "sui"),
-    "aptos": ("Aptos", "aptos", "aptos"),
-    "ton": ("TON", "ton", "the-open-network"),
-    "icp": ("ICP", "icp", "internet-computer"),
-    "cardano": ("Cardano", "cardano", "cardano"),
-}
+# ------------------------------------------------- thesis: Intents & BTC ----
+def intents_llama() -> pd.DataFrame:
+    """Daily NEAR Intents volume (USD) from DefiLlama: complete history, no key."""
+    d = _get("https://api.llama.fi/summary/dexs/near-intents", {"excludeTotalDataChartBreakdown": "true"})
+    s = pd.Series({pd.Timestamp(t, unit="s").normalize(): v for t, v in d.get("totalDataChart", [])})
+    df = pd.DataFrame({"intents_volume_usd_llama": s})
+    df.index.name = "date"
+    return df.sort_index()
 
 
-def peers() -> pd.DataFrame:
-    frames = []
-    for key, (name, slug, cg) in PEERS.items():
-        print(f"  peer {key}", flush=True)
-        df = llama_chain(name, slug)
-        mc = _get(f"https://api.coingecko.com/api/v3/coins/{cg}/market_chart",
-                  {"vs_currency": "usd", "days": 365, "interval": "daily"})
-        m = pd.DataFrame({
-            "price_usd": pd.Series({pd.Timestamp(t, unit="ms").normalize(): v for t, v in mc["prices"]}),
-            "market_cap_usd": pd.Series({pd.Timestamp(t, unit="ms").normalize(): v for t, v in mc["market_caps"]}),
-        }).groupby(level=0).last()
-        df = df.join(m, how="outer")
-        df["chain"] = key
-        df.index.name = "date"
-        frames.append(df[df.index >= START])
-        time.sleep(4)  # stay under CoinGecko's public rate limit
-    return pd.concat(frames).reset_index().set_index("date")
+def btc_price() -> pd.DataFrame:
+    """Daily BTC price (DefiLlama coins API, CoinGecko id) - the market-wide control."""
+    prices, start, now = {}, START_TS, int(time.time())
+    while start < now:
+        d = _get("https://coins.llama.fi/chart/coingecko:bitcoin", {"start": start, "span": 400, "period": "1d"})
+        pts = d["coins"]["coingecko:bitcoin"]["prices"]
+        for p in pts:
+            prices[pd.Timestamp(p["timestamp"], unit="s").normalize()] = p["price"]
+        if len(pts) < 400:
+            break
+        start = pts[-1]["timestamp"] + 3600
+    df = pd.DataFrame({"btc_price_usd": pd.Series(prices)}).sort_index()
+    df.index.name = "date"
+    return df
 
 
 # -------------------------------------------------------------- driver ----
@@ -268,7 +262,8 @@ def fetch_all(raw_dir: Path = RAW_DIR) -> None:
         "avax_market": avax_market,
         "near_llama": lambda: llama("near"),
         "avax_llama": lambda: llama("avax"),
-        "peers": peers,
+        "intents_llama": intents_llama,
+        "btc_price": btc_price,
     }
     for name, fn in jobs.items():
         print(f"fetch {name} ...", flush=True)

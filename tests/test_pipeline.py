@@ -119,5 +119,42 @@ class OfflineBuild(unittest.TestCase):
         self.assertIn(self.out["near"]["verdict"], {"Overvalued", "Undervalued", "Fairly valued", "Mixed"})
 
 
+class HypothesisTest(unittest.TestCase):
+    """The test must find a real lead when one exists, and not invent one."""
+
+    def _weekly(self, lead: bool, n=120, seed=3):
+        rng = np.random.default_rng(seed)
+        idx = pd.date_range("2024-01-07", periods=n, freq="W-SUN")
+        x = rng.normal(0, 0.1, n)                  # Intents growth
+        p = rng.normal(0, 0.1, n)                  # price growth
+        b = rng.normal(0, 0.05, n)                 # BTC growth
+        y = rng.normal(0, 0.05, n)
+        if lead:
+            y[1:] += 0.8 * x[:-1]                  # usage follows Intents one week later
+        lvl = lambda g: 100 * np.exp(np.cumsum(g))
+        return pd.DataFrame({"usage": lvl(y), "intents_usd": lvl(x), "near_price": lvl(p), "btc_price": lvl(b)}, index=idx)
+
+    def test_detects_a_real_lead(self):
+        from pipeline import hypothesis as H
+        out = H.run(self._weekly(lead=True), {"usage": "usage"})
+        self.assertEqual(out["overall"], "SUPPORTED")
+        ll = out["results"]["usage"]["intents_usd"]["lead_lag"]
+        self.assertGreater(ll[1]["r"], 0.4)
+
+    def test_does_not_invent_a_lead(self):
+        from pipeline import hypothesis as H
+        out = H.run(self._weekly(lead=False), {"usage": "usage"})
+        self.assertNotEqual(out["overall"], "SUPPORTED")
+
+    def test_thesis_build_offline(self):
+        from pipeline.thesis import build
+        o = build()
+        self.assertIn(o["test"]["overall"], {"SUPPORTED", "REJECTED", "NOT SUPPORTED", "MIXED"})
+        for c in o["charts"]:
+            self.assertTrue(c["query"] and c["sentence"], c["id"])
+            for v in c["series"].values():
+                self.assertEqual(len(v), len(o["dates"]))
+
+
 if __name__ == "__main__":
     unittest.main()

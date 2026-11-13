@@ -1,31 +1,52 @@
 #!/usr/bin/env python3
-"""NEAR investment-thesis pipeline.
+"""Rebuild every chart from raw data - one command.
 
-    python run.py            # fetch fresh public data, then build everything
-    python run.py --offline  # rebuild from the committed snapshot in data/raw/
+    python run.py                      # fetch fresh data, then rebuild everything
+    python run.py --offline            # rebuild from the committed data/raw/ only
+    python run.py --intents-minutes 30 # cap time spent sampling the Explorer API
 
-Outputs: data/processed/*.csv, docs/data/dashboard.json, reports/latest.md
+Sources and keys (keys are optional; without one, that source's committed cache is used):
+  NearBlocks, DefiLlama, NEAR RPC, CoinGecko, Avalanche Data API   public, no key
+  BigQuery  bigquery-public-data.crypto_near_mainnet_us            GCP_SA_KEY_B64 | GCP_SA_KEY_JSON | GOOGLE_APPLICATION_CREDENTIALS
+  NEAR Intents Explorer API                                        NEAR_INTENTS_JWT (env or .env)
+
+Outputs: docs/data/thesis.json + reports/thesis_results.md   (main thesis: Intents vs usage)
+         docs/data/dashboard.json + reports/latest.md        (appendix: valuation)
 """
 import argparse
 import sys
 
+from pipeline import bq, intents
 from pipeline.build import build
 from pipeline.sources import fetch_all
+from pipeline.thesis import build as build_thesis
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--offline", action="store_true", help="skip fetching; use data/raw/ as committed")
+    ap.add_argument("--intents-minutes", type=float, default=20.0,
+                    help="max minutes to spend sampling the Explorer API this run (default 20; 0 = skip)")
     args = ap.parse_args()
     if not args.offline:
         fetch_all()
+        try:
+            bq.fetch_all()
+        except Exception as e:  # keep the build going on the cached BigQuery CSVs
+            print(f"bq: FAILED ({e}) - using cached BigQuery CSVs", file=sys.stderr)
+        if args.intents_minutes > 0:
+            try:
+                intents.run(max_minutes=args.intents_minutes)
+            except Exception as e:
+                print(f"intents: FAILED ({e}) - using the cached sample", file=sys.stderr)
+
+    t = build_thesis()
+    v = t["test"]
+    print(f"thesis: {t['meta']['start']} to {t['meta']['as_of']}, {t['meta']['weeks']} weeks -> hypothesis {v['overall']} "
+          f"(intents {v['tally'].get('intents', 0)}, price {v['tally'].get('price', 0)}, neither {v['tally'].get('neither', 0)})")
     out = build()
-    L = out["latest"]
-    print(f"as of {out['meta']['as_of']}")
-    for c in ("near", "avax"):
-        print(f"  {c.upper():4}  fundamentals {L[c]['fundamentals']:>5}  valuation {L[c]['valuation']:>5}  "
-              f"confidence premium {L[c]['confidence_premium']:>6}")
-    print("wrote docs/data/dashboard.json and reports/latest.md")
+    print(f"appendix: NEAR valuation verdict {out['near']['verdict']} (as of {out['meta']['as_of']})")
+    print("wrote docs/data/thesis.json, reports/thesis_results.md, docs/data/dashboard.json, reports/latest.md")
     return 0
 
 
