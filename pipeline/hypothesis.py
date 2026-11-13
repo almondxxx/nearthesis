@@ -16,7 +16,9 @@ Method (fixed before looking at results)
   long-run trends cannot create a fake relationship.
 * One documented break gets an impulse dummy: the week containing 2026-04-02,
   when NEAR transactions fell 72% and fees 62% in a day while active accounts
-  barely moved (a large automated sender stopping). No other outliers are touched.
+  barely moved (a large automated sender stopping), and the week after it,
+  because a mid-week level shift splits across two weekly averages.
+  No other outliers are touched.
 * Predictive model: y_t on 2 own lags + 2 BTC lags (+ dummy), then add 2 lags of
   the predictor. F-test (alpha 0.05) that the predictor lags are zero.
   Out-of-sample: expanding window from mid-sample, one-week-ahead RMSE with the
@@ -75,11 +77,14 @@ def adoption_index(w: pd.DataFrame, comps: list[str]) -> pd.Series:
 
 
 def break_dummy(index: pd.DatetimeIndex) -> pd.Series:
+    """1 for the week containing each break AND the week after: a mid-week level
+    shift splits across two weekly averages, so both weeks' growth carries it."""
     d = pd.Series(0.0, index=index)
     for day in BREAK_DAYS:
         wk = pd.Timestamp(day).to_period("W-SUN").end_time.normalize()
-        if wk in d.index:
-            d.loc[wk] = 1.0
+        for w in (wk, wk + pd.Timedelta(days=7)):
+            if w in d.index:
+                d.loc[w] = 1.0
     return d
 
 

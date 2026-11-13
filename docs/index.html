@@ -77,6 +77,7 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
     <span id="asof">Loading data…</span>
     <span>Rebuilt daily from raw data with <code>python run.py</code></span>
     <a href="https://github.com/almondxxx/nearthesis/blob/claude/gracious-cannon-two4p4/THESIS.md">THESIS.md</a>
+    <a href="correlation.html">Correlation dashboard</a>
     <a href="valuation.html">Appendix: valuation</a>
   </div>
 </header>
@@ -199,7 +200,7 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
     $("#method").innerHTML = `
       <p><b>Adoption Index.</b> The geometric mean of ${m.adoption_components.map((c) => (m.labels[c] || c).toLowerCase()).join(", ")}, each indexed to 100 in the first week. Source: ${m.usage_source}. ${m.adoption_components.includes("contract_calls") ? "" : "Contract usage joins once BigQuery data covers the whole window. NearBlocks' contract field is excluded because it is dominated by one automated sender."}</p>
       <p><b>Weekly growth, not levels.</b> Complete Monday–Sunday weeks, as the week-on-week change in log level. Two series that both trend over two years would otherwise look related even if they aren't.</p>
-      <p><b>One break, handled once.</b> On ${m.break_days.join(", ")}, NEAR transactions fell 72% and fees 62% in a day while active accounts barely moved. That is consistent with one large automated sender stopping. That week gets a dummy in every regression, and no other data points are adjusted.</p>
+      <p><b>One break, handled once.</b> On ${m.break_days.join(", ")}, NEAR transactions fell 72% and fees 62% in a day while active accounts barely moved. That is consistent with one large automated sender stopping. That week and the following one get a dummy in every regression, because a mid-week drop splits across two weekly averages. No other data points are adjusted.</p>
       <p><b>Verdict rules, fixed before looking at results</b> (coded in <code>pipeline/hypothesis.py</code>). Q1 is YES when Intents passes the F-test and improves out-of-sample forecasts. Q2 is YES when Intents adds information beyond price, price adds none beyond Intents, and Intents forecasts better. Q3 is YES when fees rise with Intents volume (p &lt; 0.05) and fees per dollar of volume didn't fall by more than half.</p>
       <p><b>Sampling.</b> The Explorer API allows 1 request every 5 seconds, so swaps are counted in 2 random UTC hours per day (seeded by date) and scaled up. ${m.sampled_hours ? m.sampled_hours + " hours are sampled so far." : ""}</p>
       <p><b>BigQuery.</b> ${fr ? "Freshness check: " + esc(JSON.stringify(fr)) + "." : "Not queried yet: no credentials were available at build time."} NEAR Lake, the dataset's source, was deprecated on 2026-03-24.</p>

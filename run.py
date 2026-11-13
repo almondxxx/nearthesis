@@ -20,6 +20,7 @@ from pipeline import bq, intents
 from pipeline.build import build
 from pipeline.sources import fetch_all
 from pipeline.thesis import build as build_thesis
+from pipeline.correlation import build as build_correlation
 
 
 def main() -> int:
@@ -44,6 +45,8 @@ def main() -> int:
     a = t["results"]["answers"]
     print(f"thesis: {t['meta']['start']} to {t['meta']['as_of']}, {t['meta']['weeks']} weeks -> "
           f"Q1 {a['Q1']} | Q2 {a['Q2']} | Q3 {a['Q3']}")
+    c = build_correlation()
+    print(f"correlation: {len(c['pairs'])} Intents/adoption pairs -> docs/data/correlation.json")
     out = build()
     print(f"appendix: NEAR valuation verdict {out['near']['verdict']} (as of {out['meta']['as_of']})")
     print("wrote docs/data/thesis.json, reports/thesis_results.md, docs/data/dashboard.json, reports/latest.md")

@@ -181,7 +181,7 @@ def build() -> dict:
         f"NEAR users paid {_fmt(fn.iloc[-30:].mean())} NEAR a day in fees over the last 30 days, against "
         f"{_fmt(fn.iloc[:30].mean())} NEAR a day at the start of the window.",
         note="2 April 2026: transactions -72% and fees -62% in one day while active accounts barely moved, "
-             "consistent with one large automated sender stopping. That week gets a dummy in every test.")
+             "consistent with one large automated sender stopping. That week and the next get a dummy in every test.")
     cap = (w["fees_usd"] / w["intents_usd"] * 1e6).replace([np.inf, -np.inf], np.nan)
     add("capture", "V", "NEAR fees per $1M of NEAR Intents volume (weekly)", wk,
         {"Fees (USD) per $1M Intents volume": _r(cap, 2)},

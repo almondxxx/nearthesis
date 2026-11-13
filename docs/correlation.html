@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intents–Adoption Correlation</title>
+<meta name="description" content="Does a rise in NEAR Intents volume go with, or come before, a rise in NEAR active accounts, transactions and other adoption metrics? Weekly correlations, rebuilt daily from raw data.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.34.0/plotly.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f5f2; --surface: #fcfcfb; --border: #e3e1db; --grid: #ecebe6; --code: #f0efea;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #7a7973;
+  --x: #2a78d6; --y: #eb6834; --fit: #0b0b0b; --zero: #9a9890; --sel: rgba(42,120,214,0.08);
+  --good: #1c7a52; --bad: #b8401c; --mid: #8a6a00;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --border: #2e2d2b; --grid: #272624; --code: #232321;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8e8d86;
+    --x: #3987e5; --y: #d95926; --fit: #f0efec; --zero: #6b6a64; --sel: rgba(57,135,229,0.14);
+    --good: #4cc495; --bad: #e8845a; --mid: #d9b54a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --border: #2e2d2b; --grid: #272624; --code: #232321;
+  --text: #f0efec; --text-2: #c3c2b7; --text-3: #8e8d86;
+  --x: #3987e5; --y: #d95926; --fit: #f0efec; --zero: #6b6a64; --sel: rgba(57,135,229,0.14);
+  --good: #4cc495; --bad: #e8845a; --mid: #d9b54a;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 27px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
+header p { margin: 0 0 6px; color: var(--text-2); max-width: 800px; }
+.meta { font-size: 13px; color: var(--text-3); display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; }
+a { color: var(--x); }
+h2 { font-size: 18px; margin: 36px 0 10px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid2 .card { margin: 0; }
+.c-title { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+.c-sent { margin: 0 0 8px; color: var(--text-2); font-size: 14px; }
+.c-note { font-size: 12.5px; color: var(--text-3); margin: 6px 0 0; }
+.chart { width: 100%; height: 300px; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 13px; color: var(--text-2); }
+select { font: inherit; font-size: 14px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 8px; border-bottom: 1px solid var(--border); text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-3); font-weight: 600; }
+tbody tr { cursor: pointer; }
+tbody tr:hover, tbody tr.on { background: var(--sel); }
+.tablewrap { overflow-x: auto; }
+.pos { color: var(--good); } .neg { color: var(--bad); } .muted { color: var(--text-3); }
+.tag { font-size: 12px; font-weight: 600; }
+.answer { font-size: 15px; color: var(--text); margin: 0; }
+details { margin-top: 8px; font-size: 13px; } summary { cursor: pointer; color: var(--text-2); }
+pre { background: var(--code); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 12px; white-space: pre; margin: 8px 0 0; }
+.method { font-size: 14px; color: var(--text-2); }
+.err { color: var(--bad); }
+@media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } h1 { font-size: 23px; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Does more NEAR Intents volume mean more NEAR adoption?</h1>
+  <p>Weekly correlations between NEAR Intents volume and NEAR's adoption metrics. The page asks two things: do they <b>move together</b> in the same week, and does Intents <b>move first</b>? Every statistic uses week-on-week growth. Two series that merely trend over the same period would otherwise look related even if they aren't.</p>
+  <div class="meta">
+    <span id="asof">Loading data…</span>
+    <span>Rebuilt daily with <code>python run.py</code></span>
+    <a href="index.html">Main thesis</a>
+    <a href="valuation.html">Valuation appendix</a>
+  </div>
+</header>
+
+<div class="card" style="margin-top:22px"><p class="answer" id="answer"></p></div>
+
+<h2>Summary: every adoption metric at a glance</h2>
+<div class="card tablewrap">
+  <table id="matrix"></table>
+  <p class="c-note">Select a row to explore it below. "r" is the correlation of weekly growth rates: +1 means they rise and fall together, 0 means unrelated. A lead counts only when it is positive (a rise followed by a rise) and significant at p &lt; 0.05. Significant negative links are bounce-backs, listed in the explorer below. The "levels" column correlates the raw series. It's shown as a warning only, because two long trends can produce a strong correlation (positive or negative) without any link between them.</p>
+</div>
+
+<div class="card controls">
+  <label>Intents measure <select id="xsel"></select></label>
+  <label>Adoption metric <select id="ysel"></select></label>
+</div>
+<div class="card"><p class="c-title" id="pairtitle"></p><p class="c-sent" id="pairsent"></p></div>
+
+<div class="card">
+  <p class="c-title">1. The two series over time (indexed, first week = 100)</p>
+  <p class="c-sent" id="s-levels"></p>
+  <div id="c-levels" class="chart"></div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <p class="c-title">2. Who moves first?</p>
+    <p class="c-sent" id="s-ll"></p>
+    <div id="c-ll" class="chart"></div>
+    <p class="c-note">Bar at k: correlation of Intents growth this week with metric growth k weeks later. Right of 0: Intents moves first. Left of 0: the metric moves first. Solid bars are significant (p &lt; 0.05).</p>
+  </div>
+  <div class="card">
+    <p class="c-title">3. Same-week growth</p>
+    <p class="c-sent" id="s-sc"></p>
+    <div id="c-sc" class="chart"></div>
+    <p class="c-note">Each dot is one week. The line is the least-squares fit.</p>
+  </div>
+  <div class="card">
+    <p class="c-title">4. After a strong Intents week, does the metric rise the next week?</p>
+    <p class="c-sent" id="s-q"></p>
+    <div id="c-q" class="chart"></div>
+    <p class="c-note">Average next-week growth of the metric after the 25% strongest and the 25% weakest weeks of Intents growth. The p-value is from a Welch t-test.</p>
+  </div>
+  <div class="card">
+    <p class="c-title">5. Is the relationship stable?</p>
+    <p class="c-sent" id="s-roll"></p>
+    <div id="c-roll" class="chart"></div>
+    <p class="c-note">Same-week correlation over a rolling 26-week window.</p>
+  </div>
+</div>
+
+<h2>Method and data</h2>
+<div class="card method" id="method"></div>
+</main>
+
+<script>
+(function () {
+  const $ = (s) => document.querySelector(s);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const lf = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+  const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const cfg = { displayModeBar: false, responsive: true };
+  const pct = (v) => v == null ? "n/a" : (v > 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+  const rr = (v) => v == null ? "n/a" : (v > 0 ? "+" : "") + v.toFixed(2);
+  const pp = (v) => v == null ? "" : v < 0.001 ? "p < 0.001" : "p = " + v.toFixed(3);
+  let D = null, X = null, Y = null;
+
+  const layout = (extra) => Object.assign({
+    margin: { l: 52, r: 12, t: 8, b: 36 }, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: "ui-sans-serif, system-ui, sans-serif", size: 12, color: css("--text-2") },
+    hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--border"), font: { color: css("--text") } },
+    legend: { orientation: "h", y: 1.16, x: 0 },
+    xaxis: { gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false },
+    yaxis: { gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false },
+  }, extra || {});
+  const hz = (y) => ({ type: "line", xref: "paper", x0: 0, x1: 1, y0: y, y1: y, line: { color: css("--zero"), width: 1, dash: "dot" } });
+
+  function answer() {
+    const M = D.meta, x = Object.keys(M.measures)[0];
+    const rows = Object.keys(M.metrics).map((y) => [M.metrics[y].label, D.pairs[x + "|" + y]]);
+    const leads = rows.filter(([, r]) => r.sig_leads.length).map(([l]) => l);
+    const together = rows.filter(([, r]) => r.same_week.p < 0.05 && r.same_week.r > 0).map(([l]) => lf(l));
+    const opposite = rows.filter(([, r]) => r.same_week.p < 0.05 && r.same_week.r < 0).map(([l]) => lf(l));
+    $("#answer").innerHTML = `<b>Short answer:</b> ${leads.length ? `Intents volume moves first for ${esc(leads.join(", "))}.` :
+      `a rise in NEAR Intents volume does <b>not</b> lead to a later rise in any adoption metric here (no significant lead at 1–${M.max_k} weeks).`}
+      ${together.length ? ` It does move <b>in the same week</b> as ${esc(together.join(", "))}.` : ""}
+      ${opposite.length ? ` It moves in the <b>opposite</b> direction to ${esc(opposite.join(", "))}.` : ""}`;
+  }
+
+  function matrix() {
+    const M = D.meta;
+    let h = "<thead><tr><th>Adoption metric</th><th>Same-week r</th><th>Intents rises first (k ≥ 1)</th><th>Metric rises first (k ≤ −1)</th><th>Next week after strong / weak Intents weeks</th><th>Levels r</th><th>Reading</th></tr></thead><tbody>";
+    for (const y of Object.keys(M.metrics)) {
+      const r = D.pairs[X + "|" + y]; if (!r) continue;
+      const s = r.same_week, sig = s.p != null && s.p < 0.05;
+      h += `<tr data-y="${y}" class="${y === Y ? "on" : ""}"><td>${esc(M.metrics[y].label)}</td>
+        <td class="${sig ? (s.r > 0 ? "pos" : "neg") : "muted"}">${rr(s.r)}${sig ? " *" : ""}</td>
+        <td>${r.sig_leads.length ? r.sig_leads.map((k) => "k=" + k).join(", ") : '<span class="muted">none</span>'}</td>
+        <td>${r.sig_lags.length ? r.sig_lags.map((k) => "k=" + k).join(", ") : '<span class="muted">none</span>'}</td>
+        <td>${pct(r.quartiles.after_top)} / ${pct(r.quartiles.after_bottom)} <span class="muted">(${pp(r.quartiles.p)})</span></td>
+        <td class="muted">${rr(r.level_r)}</td><td class="tag">${esc(r.verdict)}</td></tr>`;
+    }
+    $("#matrix").innerHTML = h + "</tbody>";
+    document.querySelectorAll("#matrix tbody tr").forEach((tr) => tr.onclick = () => { Y = tr.dataset.y; $("#ysel").value = Y; render(); });
+  }
+
+  function render() {
+    const M = D.meta, r = D.pairs[X + "|" + Y], xl = M.measures[X], yl = M.metrics[Y].label;
+    matrix();
+    $("#pairtitle").textContent = `${xl} → ${yl}: ${r.verdict}`;
+    $("#pairsent").textContent = r.sentence;
+
+    // 1. levels, indexed
+    const idx = (a) => { const f = a.find((v) => v != null); return a.map((v) => v == null ? null : v / f * 100); };
+    Plotly.react("c-levels", [
+      { type: "scatter", mode: "lines", name: xl, x: D.weeks, y: idx(D.levels[X]), line: { color: css("--x"), width: 2 } },
+      { type: "scatter", mode: "lines", name: yl, x: D.weeks, y: idx(D.levels[Y]), line: { color: css("--y"), width: 2 } },
+    ], layout({ hovermode: "x unified", yaxis: { gridcolor: css("--grid"), zeroline: false, type: "log", tickformat: "~s" } }), cfg);
+    $("#s-levels").textContent = `In raw levels the two series correlate at r = ${rr(r.level_r)}. ` +
+      (r.level_r != null && r.level_r < 0 ? "That's negative because Intents grew while this metric shrank. It's a trend effect, which is why the tests below use weekly changes." : "Shared trends can make levels look related, which is why the tests below use weekly changes.");
+
+    // 2. lead-lag
+    const ll = r.lead_lag, col = (c) => c.k > 0 ? css("--x") : c.k < 0 ? css("--y") : css("--fit");
+    Plotly.react("c-ll", [{ type: "bar", x: ll.map((c) => c.k), y: ll.map((c) => c.r),
+      marker: { color: ll.map((c) => (c.p != null && c.p < 0.05) ? col(c) : "rgba(0,0,0,0)"), line: { color: ll.map(col), width: 1.5 } },
+      customdata: ll.map((c) => [c.p, c.n]), hovertemplate: "k=%{x}: r=%{y:.2f} (p=%{customdata[0]}, n=%{customdata[1]})<extra></extra>" }],
+      layout({ bargap: 0.25, shapes: [hz(0)], xaxis: { gridcolor: css("--grid"), zeroline: false, dtick: 1, title: { text: "← metric moves first   ·   k (weeks)   ·   Intents moves first →" } },
+        yaxis: { gridcolor: css("--grid"), zeroline: false, range: [-0.6, 0.6], title: { text: "r" } } }), cfg);
+    $("#s-ll").textContent = (r.sig_leads.length ? `A rise in Intents is followed by a rise in ${lf(yl)} at k = ${r.sig_leads.join(", ")} weeks.` :
+      `No significant positive bar to the right of 0: a rise in Intents isn't followed by a rise in ${lf(yl)}.`) +
+      (r.sig_lags.length ? ` ${yl} rises first at k = ${r.sig_lags.join(", ")}.` : "") +
+      (r.reversals.length ? ` Significant negative bars at k = ${r.reversals.join(", ")} are bounce-backs, not leads.` : "");
+
+    // 3. scatter
+    const sc = r.scatter, xs = sc.x, mn = Math.min(...xs), mx = Math.max(...xs);
+    const my = sc.y.reduce((a, b) => a + b, 0) / sc.y.length, mxm = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const icpt = my - sc.slope * mxm;
+    Plotly.react("c-sc", [
+      { type: "scatter", mode: "markers", name: "weeks", x: xs, y: sc.y, text: sc.date, marker: { color: css("--x"), size: 8, opacity: 0.7, line: { color: css("--surface"), width: 1 } },
+        hovertemplate: "%{text}<br>Intents %{x:+.1%}<br>metric %{y:+.1%}<extra></extra>" },
+      { type: "scatter", mode: "lines", name: "fit", x: [mn, mx], y: [icpt + sc.slope * mn, icpt + sc.slope * mx], line: { color: css("--fit"), width: 2 }, hoverinfo: "skip" },
+    ], layout({ showlegend: false, hovermode: "closest",
+      xaxis: { gridcolor: css("--grid"), zeroline: false, tickformat: "+.0%", title: { text: "Intents volume, weekly growth" } },
+      yaxis: { gridcolor: css("--grid"), zeroline: false, tickformat: "+.0%", title: { text: yl + ", weekly growth" } } }), cfg);
+    const s = r.same_week;
+    $("#s-sc").textContent = `r = ${rr(s.r)} (${pp(s.p)}, ${s.n} weeks). On average, a week with 10% more Intents volume had ${(sc.slope * 10).toFixed(1)}% ${sc.slope >= 0 ? "more" : "less"} ${lf(yl)} in that same week.`;
+
+    // 4. quartiles
+    const q = r.quartiles;
+    Plotly.react("c-q", [{ type: "bar", x: ["After the weakest 25% of Intents weeks", "After the strongest 25%"], y: [q.after_bottom, q.after_top],
+      marker: { color: [css("--y"), css("--x")] }, text: [pct(q.after_bottom), pct(q.after_top)], textposition: "outside", cliponaxis: false,
+      hovertemplate: "%{x}: %{y:+.1%}<extra></extra>" }],
+      layout({ showlegend: false, shapes: [hz(0)], yaxis: { gridcolor: css("--grid"), zeroline: false, tickformat: "+.1%", title: { text: "next-week growth" } } }), cfg);
+    $("#s-q").textContent = `${yl} grew ${pct(q.after_top)} the week after strong Intents weeks (n = ${q.n_top}), against ${pct(q.after_bottom)} after weak ones (n = ${q.n_bottom}). ` +
+      (q.p != null && q.p < 0.05 ? `The difference is significant (${pp(q.p)}).` : `The difference isn't significant (${pp(q.p)}).`);
+
+    // 5. rolling
+    const roll = r.rolling, vals = roll.filter((v) => v != null);
+    Plotly.react("c-roll", [{ type: "scatter", mode: "lines", x: D.weeks, y: roll, line: { color: css("--x"), width: 2 }, hovertemplate: "%{x}: r=%{y:.2f}<extra></extra>" }],
+      layout({ showlegend: false, shapes: [hz(0)], hovermode: "x", yaxis: { gridcolor: css("--grid"), zeroline: false, range: [-1, 1] } }), cfg);
+    $("#s-roll").textContent = vals.length ? `The 26-week correlation ranged from ${rr(Math.min(...vals))} to ${rr(Math.max(...vals))}, and is ${rr(vals[vals.length - 1])} in the latest window.` : "Not enough weeks yet.";
+  }
+
+  function method() {
+    const M = D.meta;
+    $("#method").innerHTML = `
+      <p><b>Data.</b> Intents volume: <code>GET https://api.llama.fi/summary/dexs/near-intents</code> (DefiLlama, complete daily USD). Swap counts: NEAR Intents Explorer API, from 2 random hours sampled per day${M.measures.intents_swaps ? "" : " (available here once 30 weeks are sampled)"}. Adoption metrics: ${esc(M.usage_source)} (<code>GET https://api.nearblocks.io/v1/charts</code>${M.bq_available ? "; BigQuery <code>sql/01_daily_activity.sql</code>, <code>sql/02_contract_usage.sql</code>" : ""}). ${M.not_available.length ? "Not available yet: " + esc(M.not_available.join(", ")) + " (needs BigQuery)." : ""}</p>
+      <p><b>Weekly growth.</b> Complete Monday–Sunday weeks from ${M.first_week} to ${M.last_week} (${M.weeks} weeks). Each statistic uses the week-on-week change in log level.</p>
+      <p><b>One week excluded.</b> On ${M.break_days.join(", ")}, NEAR transactions fell 72% and fees 62% in one day while active accounts barely moved. That is consistent with one large automated sender stopping. That week and the following one are left out of every growth statistic, because a mid-week drop splits across two weekly averages.</p>
+      <p><b>Correlation is not causation.</b> A same-week link can come from a shared driver, such as overall crypto activity. The main thesis page tests prediction with BTC as a market control and reports the verdicts.</p>`;
+  }
+
+  fetch("data/correlation.json", { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then((d) => {
+    D = d; X = Object.keys(d.meta.measures)[0]; Y = Object.keys(d.meta.metrics)[0];
+    $("#asof").textContent = `Weeks ${d.meta.first_week} to ${d.meta.last_week} · built ${d.meta.built_at.replace("T", " ").replace("Z", " UTC")}`;
+    $("#xsel").innerHTML = Object.entries(d.meta.measures).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("");
+    $("#ysel").innerHTML = Object.entries(d.meta.metrics).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join("");
+    $("#xsel").onchange = (e) => { X = e.target.value; answer(); render(); };
+    $("#ysel").onchange = (e) => { Y = e.target.value; render(); };
+    answer(); render(); method();
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+  }).catch((e) => { $("#asof").innerHTML = `<span class="err">Could not load data/correlation.json (${e.message}). Run <code>python run.py</code>, then serve <code>docs/</code>.</span>`; });
+})();
+</script>
+</body>
+</html>
