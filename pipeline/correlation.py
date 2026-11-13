@@ -39,7 +39,7 @@ METRICS = {  # column -> (label, weekly aggregation, source note)
     "new_accounts": ("New accounts", "mean", "accounts created per day (NearBlocks)"),
     "returning_signers": ("Returning signers", "mean", "signed this week and in one of the 4 previous weeks (BigQuery)"),
     "fees_native": ("Fees burned (NEAR)", "sum", "transaction fees in NEAR (NearBlocks)"),
-    "contract_calls": ("Contract calls", "mean", "function-call receipts (BigQuery)"),
+    "contract_calls": ("Contracts/accounts used", "mean", "distinct accounts or contracts receiving transactions (BigQuery)"),
 }
 MEASURES = {"intents_usd": "NEAR Intents volume (USD)", "intents_swaps": "NEAR Intents swaps (sampled)",
             "near_price": "NEAR price"}

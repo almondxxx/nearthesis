@@ -1,15 +1,14 @@
--- Daily contract usage: function-call receipts, distinct contracts called,
--- and on-chain activity of the NEAR Intents contract (intents.near).
--- Partition filter on block_date keeps the scan to the requested days only.
+-- Daily contract usage from the transactions table (cheap: ~3 narrow columns).
+-- distinct_receivers: accounts/contracts that received at least one transaction
+-- intents_direct_txs / _signers: transactions sent straight to intents.near
+-- (Receipt-level function calls are in sql/optional/02b_contract_usage_receipts.sql;
+--  that version scans ~318 GB per 6 months, so it is not run by default.)
 SELECT
   block_date,
-  COUNT(*)                                     AS function_calls,
-  COUNT(DISTINCT receipt_receiver_account_id)  AS contracts_called,
-  COUNTIF(receipt_receiver_account_id = 'intents.near') AS intents_contract_calls,
-  COUNT(DISTINCT IF(receipt_receiver_account_id = 'intents.near',
-                    receipt_predecessor_account_id, NULL)) AS intents_contract_callers
-FROM `bigquery-public-data.crypto_near_mainnet_us.receipt_actions`
+  COUNT(DISTINCT receiver_account_id)                                   AS distinct_receivers,
+  COUNTIF(receiver_account_id = 'intents.near')                         AS intents_direct_txs,
+  COUNT(DISTINCT IF(receiver_account_id = 'intents.near', signer_account_id, NULL)) AS intents_direct_signers
+FROM `bigquery-public-data.crypto_near_mainnet_us.transactions`
 WHERE block_date BETWEEN @start_date AND @end_date
-  AND action_kind = 'FUNCTION_CALL'
 GROUP BY block_date
 ORDER BY block_date;

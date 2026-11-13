@@ -56,13 +56,21 @@ jobs:
             done
           fi
 
+      # Pages must be enabled once (Settings -> Pages -> Source: GitHub Actions); until then these
+      # steps warn instead of failing the run.
       - uses: actions/configure-pages@v5
+        id: pages
+        continue-on-error: true
       - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outcome == 'success'
         with:
           path: docs
+    outputs:
+      pages: ${{ steps.pages.outcome }}
 
   deploy:
     needs: refresh
+    if: needs.refresh.outputs.pages == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

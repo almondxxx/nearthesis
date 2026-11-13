@@ -29,7 +29,7 @@ EXPLORER_Q = ("GET https://explorer.near-intents.org/api/v0/transactions"
               "Authorization: Bearer $NEAR_INTENTS_JWT\n"
               "-> 2 random UTC hours per day (seeded by date), every swap in each hour (paged);\n"
               "   swaps = mean(successful swaps per sampled hour) x 24 per day, x 168 per week")
-LABELS = {"active_accounts": "Active accounts", "transactions": "Transactions", "contract_calls": "Contract calls",
+LABELS = {"active_accounts": "Active accounts", "transactions": "Transactions", "contract_calls": "Contracts/accounts used",
           "adoption": "Adoption Index", "intents_usd": "NEAR Intents volume (USD)",
           "intents_swaps": "NEAR Intents swaps (sampled)", "near_price": "NEAR price",
           "fees_native": "Fees burned (NEAR)", "fees_usd": "Fees (USD)", "returning_signers": "Returning signers (BigQuery)",
@@ -85,12 +85,10 @@ def assemble() -> tuple[pd.DataFrame, dict]:
         df["active_accounts"] = nb["active_accounts"]
         df["transactions"] = nb["txns"]
         meta["usage_source"] = "NearBlocks"
-    if cu is not None:
-        df["bq_contract_calls"] = cu["function_calls"]
-        df["bq_contracts_called"] = cu["contracts_called"]
-        df["bq_intents_contract_calls"] = cu["intents_contract_calls"]
+    if cu is not None and "distinct_receivers" in cu:
+        df["intents_direct_txs"] = cu["intents_direct_txs"]
         if bq_fresh:
-            df["contract_calls"] = cu["function_calls"]
+            df["contract_calls"] = cu["distinct_receivers"]   # contract usage component of the Adoption Index
     today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
     return df[df.index < today], meta
 

@@ -79,16 +79,31 @@ def fetch_all() -> bool:
         return False
     fr = freshness(client)
     print(f"bq: freshness {fr}", flush=True)
+    try:
+        _run(client, "04_schema.sql").to_csv(RAW / "bq_schema.csv", index=False)
+    except Exception as e:
+        print(f"bq: schema check FAILED ({e})", flush=True)
     latest = min(pd.Timestamp(v["latest"]) for k, v in fr.items() if k != "checked_at")
     yesterday = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize() - pd.Timedelta(days=1)
     end = min(latest, yesterday)
+    ok = True
     for name, sql_file in QUERIES.items():
+        try:
+            _fetch_one(client, name, sql_file, end)
+        except Exception as e:  # one failing query must not skip the others
+            ok = False
+            print(f"bq: {name} FAILED ({e}) - keeping its cached CSV", flush=True)
+    return ok
+
+
+def _fetch_one(client, name: str, sql_file: str, end: pd.Timestamp) -> None:
+    if True:
         path = RAW / f"{name}.csv"
         old = pd.read_csv(path, parse_dates=["block_date"]) if path.exists() else None
         start = (old["block_date"].max() + pd.Timedelta(days=1)) if old is not None and len(old) else START
         if start > end:
             print(f"bq: {name} up to date ({end.date()})")
-            continue
+            return
         # chunk by ~6 months so each dry run stays well under the cap
         parts = [] if old is None else [old]
         for s in pd.date_range(start, end, freq="183D"):
@@ -97,8 +112,7 @@ def fetch_all() -> bool:
         df = pd.concat(parts, ignore_index=True)
         df["block_date"] = pd.to_datetime(df["block_date"])
         df.drop_duplicates("block_date", keep="last").sort_values("block_date").to_csv(path, index=False)
-        print(f"bq: {name} -> {path.name} ({len(df)} days)")
-    return True
+        print(f"bq: {name} -> {path.name} ({len(df)} rows)")
 
 
 def load(name: str) -> pd.DataFrame | None:
