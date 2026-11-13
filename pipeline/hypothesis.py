@@ -183,7 +183,7 @@ def q1_q2(g: pd.DataFrame, y: str, intents: str, price: str = "near_price") -> d
 
 
 def q3(w: pd.DataFrame, intents: str = "intents_usd", value: str = "fees_native",
-       value_usd: str = "fees_usd") -> dict:
+       value_usd: str = "fees_usd", mature_from: pd.Timestamp | None = None) -> dict:
     g = growth(w)
     d = pd.DataFrame({"v": g[value], "x": g[intents], "c": g[CONTROL], "brk": break_dummy(g.index)}).dropna()
     out = {"value": value, "n": len(d)}
@@ -205,6 +205,22 @@ def q3(w: pd.DataFrame, intents: str = "intents_usd", value: str = "fees_native"
     out["capture_last_q_label"] = str(q.index[-1].to_period("Q")) if len(q) else None
     out["capture_change"] = round(float(q.iloc[-1] / q.iloc[0] - 1), 4) if len(q) > 1 else None
 
+    # Descriptive, not part of the verdict: quarterly fees per $1M from summed quarters,
+    # from the first FULL quarter after Intents passed $1M/day to the last COMPLETE quarter.
+    qs = pd.DataFrame({"f": w[value_usd], "i": w[intents]}).dropna().resample("QE").agg(["sum", "count"])
+    full = qs[("f", "count")] >= 12                       # complete quarters only (>= 12 weeks)
+    per = (qs[("f", "sum")] / qs[("i", "sum")] * 1e6)
+    out["capture_quarters"] = {str(k.to_period("Q")): round(float(v), 1) for k, v in per.items() if pd.notna(v)}
+    if mature_from is not None:
+        start_q = (pd.Timestamp(mature_from).to_period("Q") + 1).end_time.normalize()
+        cand = per[(per.index >= start_q) & full]
+        if len(cand) >= 2:
+            out["capture_post_launch_from"] = str(cand.index[0].to_period("Q"))
+            out["capture_post_launch_first"] = round(float(cand.iloc[0]), 1)
+            out["capture_post_launch_to"] = str(cand.index[-1].to_period("Q"))
+            out["capture_post_launch_last"] = round(float(cand.iloc[-1]), 1)
+            out["capture_post_launch_change"] = round(float(cand.iloc[-1] / cand.iloc[0] - 1), 4)
+
     pos = out["elasticity"] > 0 and out["elasticity_p"] < ALPHA
     held = out["capture_change"] is not None and out["capture_change"] > -0.5
     out["verdict"] = "YES" if (pos and held) else ("PARTLY" if pos else "NO")
@@ -221,7 +237,8 @@ def mature_start(daily_intents_usd: pd.Series) -> pd.Timestamp | None:
     return None if hit.empty else hit.index.min()
 
 
-def _block(w: pd.DataFrame, comps: list[str], real: list[str], measures: list[str]) -> dict:
+def _block(w: pd.DataFrame, comps: list[str], real: list[str], measures: list[str],
+           mature_from: pd.Timestamp | None = None) -> dict:
     w = w.copy()
     w["adoption"] = adoption_index(w, comps)
     w["real_usage"] = adoption_index(w, [c for c in real if c in w])
@@ -237,8 +254,8 @@ def _block(w: pd.DataFrame, comps: list[str], real: list[str], measures: list[st
     for c in list(dict.fromkeys(real + comps)):
         if c in g and g[c].notna().sum() >= 30:
             res["q12_robustness"][f"{c}~{main_i}"] = q1_q2(g, c, main_i)
-    res["q3"] = q3(w, main_i)
-    res["q3_usd"] = q3(w, main_i, value="fees_usd")
+    res["q3"] = q3(w, main_i, mature_from=mature_from)
+    res["q3_usd"] = q3(w, main_i, value="fees_usd", mature_from=mature_from)
     res["answers"] = {"Q1": res["q12"]["q1"], "Q2": res["q12"]["q2"], "Q3": res["q3"]["verdict"],
                       "Q1_adoption": res["q12_adoption"]["q1"], "Q2_adoption": res["q12_adoption"]["q2"]}
     res["weeks"] = int(w["real_usage"].notna().sum())
@@ -250,7 +267,7 @@ def _block(w: pd.DataFrame, comps: list[str], real: list[str], measures: list[st
 def run(w: pd.DataFrame, comps: list[str], intents_measures: list[str],
         real: list[str] | None = None, mature_from: pd.Timestamp | None = None) -> dict:
     real = real or [c for c in REAL_USAGE if c in w]
-    full = _block(w, comps, real, intents_measures)
+    full = _block(w, comps, real, intents_measures, mature_from)
     out = {k: v for k, v in full.items() if k != "_w"}
     out["components"] = comps
     out["real_usage_components"] = real
@@ -259,7 +276,7 @@ def run(w: pd.DataFrame, comps: list[str], intents_measures: list[str],
     if mature_from is not None:                                  # fix 3: robustness window
         wm = w[w.index >= mature_from]
         if len(wm) >= 40:
-            mb = _block(wm, comps, real, intents_measures)
+            mb = _block(wm, comps, real, intents_measures, mature_from)
             out["mature"] = {k: v for k, v in mb.items() if k != "_w"}
             out["mature"]["from"] = pd.Timestamp(mature_from).strftime("%Y-%m-%d")
     return out

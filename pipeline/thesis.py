@@ -210,9 +210,13 @@ def build() -> dict:
     add("capture", "V", "NEAR fees per $1M of NEAR Intents volume (weekly)", wk,
         {"Fees (USD) per $1M Intents volume": _r(cap, 2)},
         NEARBLOCKS_Q.format(f="txn_fee_usd") + "\n" + LLAMA_Q,
-        f"In {q3.get('capture_first_q_label')} NEAR earned ${q3.get('capture_first_q')} in fees per $1M of Intents volume; "
-        f"in {q3.get('capture_last_q_label')} it earned ${q3.get('capture_last_q')} "
-        f"({(q3.get('capture_change') or 0):+.0%}).", kind="log", unit="$")
+        (f"Since Intents passed $1M a day, NEAR's fees per $1M of Intents volume fell from "
+         f"${q3['capture_post_launch_first']:,.0f} in {q3['capture_post_launch_from']} to "
+         f"${q3['capture_post_launch_last']:,.0f} in {q3['capture_post_launch_to']} "
+         f"({q3['capture_post_launch_change']:+.0%}, complete quarters)." if q3.get("capture_post_launch_from") else
+         f"In {q3.get('capture_first_q_label')} NEAR earned ${q3.get('capture_first_q')} in fees per $1M of Intents volume; "
+         f"in {q3.get('capture_last_q_label')} it earned ${q3.get('capture_last_q')}."), kind="log", unit="$",
+        note="Earlier weeks are Intents' launch period, when its volume was tiny, so the ratio there is not comparable.")
 
     out = {
         "meta": {**meta, "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

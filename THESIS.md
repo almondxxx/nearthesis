@@ -92,14 +92,16 @@ counts match NearBlocks almost exactly in every quarter.
 4. **Part of the same-week link is mechanical.** Intents' own settlement transactions are counted in NEAR's
    transactions and fees. Some of the +0.40 with transactions and +0.38 with fees is the same activity measured
    twice, not new adoption.
-5. **Each dollar of Intents volume earns NEAR less.** NEAR fees per $1M of Intents volume, by quarter:
+5. **Each dollar of Intents volume earns NEAR less.** NEAR fees per $1M of Intents volume, by quarter, from the first
+   full quarter after Intents passed $1M a day:
 
-   | Quarter | Q4 2025 | Q1 2026 | Q2 2026 | Q3 2026 | Q4 2026 to date |
-   |---|---:|---:|---:|---:|---:|
-   | Fees per $1M | $85.3 | $44.1 | $22.8 | $19.2 | $44.8 |
+   | Quarter | Q3 2025 | Q4 2025 | Q1 2026 | Q2 2026 | Q3 2026 | Q4 2026 to date |
+   |---|---:|---:|---:|---:|---:|---:|
+   | Fees per $1M | $807 | $85 | $44 | $23 | $19 | $45 |
 
-   The quarters before Q4 2025 are inflated by Intents' launch, when volume was tiny. Since then, value capture per
-   dollar has fallen sharply.
+   That is **−98%** from Q3 2025 to Q3 2026, comparing complete quarters. Earlier quarters are Intents' launch
+   period, when volume was tiny, so they aren't comparable. The pre-set Q3 rule, which compares against the first
+   data quarter, gives the same verdict: PARTLY.
 6. **The swap-count leads may be chance.** Across the 144 lead tests on the correlation page (3 predictors × 6
    metrics × 8 leads), only 3 positive leads are significant. At this significance level, chance alone would produce
    about 3.6. The swap counts also fail the stricter predictive test for the Real Usage Index (p = 0.88, error

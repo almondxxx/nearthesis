@@ -144,7 +144,7 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
       card("Q2", "Is Intents volume a better predictor than NEAR's price?", A.Q2,
         `Intents beyond price: ${pp(q.intents_beyond_price.p)}. Price beyond Intents: ${pp(q.price_beyond_intents.p)}. Error ratios: Intents ${q.intents_alone.oos_ratio}, price ${q.price_alone.oos_ratio}.`) +
       card("Q3", "Does Intents activity translate into economically valuable activity for NEAR?", A.Q3,
-        `Same week: +10% Intents volume ≈ ${(q3.elasticity * 10).toFixed(1)}% more fees (${pp(q3.elasticity_p)}). Fees per $1M of volume: ${(q3.capture_change * 100).toFixed(0)}% from ${q3.capture_first_q_label} to ${q3.capture_last_q_label}.`);
+        `Same week: +10% Intents volume ≈ ${(q3.elasticity * 10).toFixed(1)}% more fees (${pp(q3.elasticity_p)}). ` + (q3.capture_post_launch_from ? `Fees per $1M of volume: $${q3.capture_post_launch_first.toFixed(0)} (${q3.capture_post_launch_from}) → $${q3.capture_post_launch_last.toFixed(0)} (${q3.capture_post_launch_to}).` : ""));
   }
 
   function charts() {
@@ -199,7 +199,8 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
       <tr><td>Same-week elasticity of fees in NEAR to Intents volume (BTC-controlled)</td><td>${a.elasticity} (95% CI ${a.elasticity_ci.join(" to ")}), ${pp(a.elasticity_p)}</td><td>Fees rise ${(a.elasticity * 10).toFixed(1)}% when Intents volume rises 10% in the same week</td></tr>
       <tr><td>Same, fees in USD</td><td>${b.elasticity}, ${pp(b.elasticity_p)}</td><td>${b.elasticity_p < 0.05 ? "Also significant" : "Not significant"}</td></tr>
       <tr><td>Do Intents' last 2 weeks predict fees?</td><td>${pp(a.predictive.p)}, error ratio ${a.predictive.oos_ratio}</td><td>${a.predictive.p < 0.05 && a.predictive.oos_ratio < 1 ? "Yes" : "No: they move together, but Intents doesn't lead"}</td></tr>
-      <tr><td>NEAR fees per $1M of Intents volume</td><td>$${a.capture_first_q} (${a.capture_first_q_label}) → $${a.capture_last_q} (${a.capture_last_q_label})</td><td>${(a.capture_change * 100).toFixed(0)}%. The first quarter is Intents' launch; see the chart for every quarter.</td></tr>
+      <tr><td>NEAR fees per $1M of Intents volume, since Intents passed $1M a day (complete quarters)</td><td>$${a.capture_post_launch_first} (${a.capture_post_launch_from}) → $${a.capture_post_launch_last} (${a.capture_post_launch_to})</td><td>${(a.capture_post_launch_change * 100).toFixed(0)}%</td></tr>
+      <tr><td>Same, from the first data quarter (the pre-set rule)</td><td>$${a.capture_first_q} (${a.capture_first_q_label}) → $${a.capture_last_q} (${a.capture_last_q_label})</td><td>${(a.capture_change * 100).toFixed(0)}%. The first quarter is Intents' launch, when volume was tiny.</td></tr>
       <tr><td><b>Answer</b></td><td colspan="2"><b>${a.verdict}</b></td></tr></tbody>`;
   }
 

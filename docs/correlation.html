@@ -139,7 +139,7 @@ pre { background: var(--code); border: 1px solid var(--border); border-radius: 6
 (function () {
   const $ = (s) => document.querySelector(s);
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  const lf = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+  const lf = (s) => (s.length > 1 && s[1] === s[1].toUpperCase() && s[1] !== s[1].toLowerCase()) ? s : s.charAt(0).toLowerCase() + s.slice(1);
   const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
   const cfg = { displayModeBar: false, responsive: true };
   const pct = (v) => v == null ? "n/a" : (v > 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
