@@ -133,7 +133,8 @@ def _verdict(same, lead, lag, xl="Predictor") -> str:
     if base:
         return base
     if extra:
-        return "; ".join(extra).capitalize()
+        out = "; ".join(extra)
+        return out[0].upper() + out[1:]
     return "No reliable link"
 
 
