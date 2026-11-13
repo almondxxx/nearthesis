@@ -1,6 +1,6 @@
 # NEAR vs AVAX - latest numbers
 
-_Generated automatically by `python run.py`. Data as of **2026-11-12** (fetched 2026-11-13T09:04:26Z). Do not edit by hand: the next pipeline run overwrites this file._
+_Generated automatically by `python run.py`. Data as of **2026-11-12** (fetched 2026-11-13T09:13:28Z). Do not edit by hand: the next pipeline run overwrites this file._
 
 ## Indices (0-100, percentile vs the chain's own trailing 365 days)
 
