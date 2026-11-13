@@ -34,7 +34,7 @@ price does at least as well.
 | Role | Variable | Source |
 |---|---|---|
 | Candidate leading indicator | NEAR Intents volume (USD, daily, complete) | DefiLlama `summary/dexs/near-intents` |
-| Robustness check for it | NEAR Intents successful swaps (1Click), estimated from 1,072 sampled hours | NEAR Intents Explorer API (JWT) |
+| Robustness check for it | NEAR Intents successful swaps (1Click), estimated from 1,362 sampled hours (2 random hours per day, 2025-01-01 to 2026-11-12) | NEAR Intents Explorer API (JWT) |
 | Competing indicator | NEAR price | NearBlocks |
 | Market control | BTC price | DefiLlama coins API |
 | **Primary target: Real Usage Index** | Geometric mean of **returning signers** (signed this week and in one of the previous 4 weeks) and **fees burned in NEAR**, two measures bots can't cheaply fake | BigQuery `sql/03_weekly_returning_signers.sql`; NearBlocks fees |
@@ -57,16 +57,18 @@ counts match NearBlocks almost exactly in every quarter.
    Intents gives an out-of-sample error ratio of 0.99, against 1.00 for price. The direction favours Intents, but
    the gain is about 1% and not significant (p = 0.38).
 3. **Sampled swap counts show some positive leads:**
-   - active accounts 1 week later (r = +0.25, p = 0.035, 73 weeks);
-   - fees 6 weeks later (r = +0.26, p = 0.029);
-   - new accounts 8 weeks later (r = +0.29, p = 0.015).
+   - active accounts 1 week later (r = +0.24, p = 0.038, 77 weeks);
+   - new accounts 8 weeks later (r = +0.25, p = 0.040, 70 weeks).
 
-   In the week after the strongest quarter of swap weeks, active accounts changed +0.0%, against −9.5% after the
-   weakest quarter (p = 0.04).
-4. **Intents activity does reach NEAR's fees** (Q3). In the same week, 10% more Intents volume goes with about
+   In the week after the strongest quarter of swap weeks, active accounts changed **+1.8%**, against **−10.5%**
+   after the weakest quarter (p = 0.025).
+4. **Swap counts move with returning users.** The number of swaps (unaffected by crypto prices) moves with returning
+   signers in the same week (**r = +0.26, p = 0.022**). USD volume doesn't (r = +0.06). Counting swaps rather than
+   dollars brings Intents closer to real repeat usage.
+5. **Intents activity does reach NEAR's fees** (Q3). In the same week, 10% more Intents volume goes with about
    **0.9% more fees in NEAR** (elasticity 0.092, 95% CI 0.049–0.135, p < 0.001, controlling for BTC). This holds
    in the mature window (0.084, p = 0.002).
-5. **Intents is NEAR's one growing activity.** It moved $128.3K a day in its first 30 days on DefiLlama and
+6. **Intents is NEAR's one growing activity.** It moved $128.3K a day in its first 30 days on DefiLlama and
    $125.81M a day over the last 30, while the Real Usage Index fell from 100 to 12.6.
 
 ## Evidence AGAINST the claim
@@ -80,8 +82,10 @@ counts match NearBlocks almost exactly in every quarter.
      the broad Adoption Index (p = 0.025).
 
    Intents does neither.
-3. **Real users don't move with Intents.** Returning signers show no link with Intents volume even in the same week
-   (r = +0.06, p = 0.58), and neither do active accounts (r = −0.07).
+3. **Real users don't move with Intents *volume*.** Returning signers show no link with Intents USD volume even in
+   the same week (r = +0.06, p = 0.58), and neither do active accounts (r = −0.07). Swap counts do move with
+   returning signers in the same week (point 4 above), but returning signers rise about **4 weeks before** swaps
+   do (r = +0.24, p = 0.036): users come first, which is the opposite of the claim.
    - The reason shows in BigQuery: about **88K transactions a day go directly to `intents.near`, from only about
      166 signers** (30-day averages). Intents settlement runs through a small set of relayer and solver accounts,
      so cross-chain volume can grow without NEAR gaining users.
@@ -97,9 +101,9 @@ counts match NearBlocks almost exactly in every quarter.
    The quarters before Q4 2025 are inflated by Intents' launch, when volume was tiny. Since then, value capture per
    dollar has fallen sharply.
 6. **The swap-count leads may be chance.** Across the 144 lead tests on the correlation page (3 predictors × 6
-   metrics × 8 leads), 4 positive leads are significant. At this significance level, chance alone would produce
-   about 3.6. The swap counts also fail the stricter predictive test for the Real Usage Index (p = 0.79, error
-   ratio 1.02).
+   metrics × 8 leads), only 3 positive leads are significant. At this significance level, chance alone would produce
+   about 3.6. The swap counts also fail the stricter predictive test for the Real Usage Index (p = 0.88, error
+   ratio 1.01).
 
 ## What would change my mind
 - **Toward the claim:**
@@ -156,8 +160,8 @@ All of these were made in the open. The code history shows each one.
 
 ## Caveats
 - About 100 weeks of noisy data can only detect a fairly strong lead, so "not supported" is not the same as "false".
-- The sampled swap series has about 13% median weekly standard error. The sample was still being collected at this
-  snapshot.
+- The sampled swap series has about 10% median weekly standard error (1,362 sampled hours, complete for
+  2025-01-01 to 2026-11-12).
 - This is research, not investment advice.
 
 **Appendix:** a separate valuation check of NEAR against its own on-chain fundamentals, at
