@@ -41,7 +41,9 @@ METRICS = {  # column -> (label, weekly aggregation, source note)
     "fees_native": ("Fees burned (NEAR)", "sum", "transaction fees in NEAR (NearBlocks)"),
     "contract_calls": ("Contract calls", "mean", "function-call receipts (BigQuery)"),
 }
-MEASURES = {"intents_usd": "NEAR Intents volume (USD)", "intents_swaps": "NEAR Intents swaps (sampled)"}
+MEASURES = {"intents_usd": "NEAR Intents volume (USD)", "intents_swaps": "NEAR Intents swaps (sampled)",
+            "near_price": "NEAR price"}
+INTENTS = ["intents_usd", "intents_swaps"]
 
 
 def _weekly() -> tuple[pd.DataFrame, dict]:
@@ -50,7 +52,7 @@ def _weekly() -> tuple[pd.DataFrame, dict]:
     df["new_accounts"] = nb["new_accounts"]
     df["returning_accounts"] = (nb["active_accounts"] - nb["new_accounts"]).clip(lower=0)
     how = {c: a for c, (_, a, _) in METRICS.items()}
-    how.update({"intents_usd": "sum", "btc_price": "mean"})
+    how.update({"intents_usd": "sum", "btc_price": "mean", "near_price": "mean"})
     w = H.weekly(df, how)
     if (RAW / "intents_hour_samples.csv").exists():
         s = pd.read_csv(RAW / "intents_hour_samples.csv", parse_dates=["date"]).drop_duplicates(["date", "hour"])
@@ -111,16 +113,16 @@ def pair(g: pd.DataFrame, w: pd.DataFrame, x: str, y: str) -> dict:
         "sig_leads": [c["k"] for c in lead],
         "sig_lags": [c["k"] for c in lag],
         "reversals": [c["k"] for c in rev],
-        "verdict": _verdict(same, lead, lag),
+        "verdict": _verdict(same, lead, lag, MEASURES.get(x, x)),
     }
 
 
-def _verdict(same, lead, lag) -> str:
+def _verdict(same, lead, lag, xl="Predictor") -> str:
     together = same["p"] is not None and same["p"] < 0.05
     base = ("Move together (same week)" if same["r"] > 0 else "Move in opposite directions (same week)") if together else None
     extra = []
     if lead:
-        extra.append("Intents moves first")
+        extra.append(f"{xl} moves first")
     if lag:
         extra.append("metric moves first")
     if base and extra:
@@ -138,12 +140,12 @@ def _sentence(xl, yl, r: dict) -> str:
     if s["r"] is not None:
         pv = "p < 0.001" if s["p"] < 0.001 else f"p = {s['p']:.3f}"
         parts.append(f"Same week: r = {s['r']:+.2f} ({'significant' if s['p'] < 0.05 else 'not significant'}, {pv}).")
-    parts.append(f"Intents rising before the metric rises (positive leads at 1-{MAXK} weeks): {', '.join(f'k={k}' for k in r['sig_leads']) or 'none'}.")
+    parts.append(f"{xl} rising before the metric rises (positive leads at 1-{MAXK} weeks): {', '.join(f'k={k}' for k in r['sig_leads']) or 'none'}.")
     if r["reversals"]:
         parts.append(f"Significant negative links at k = {', '.join(str(k) for k in r['reversals'])}: a bounce-back pattern, not a lead.")
-    if q["after_top"] is not None:
-        parts.append(f"After the strongest quarter of Intents weeks, {yl[0].lower() + yl[1:]} grew {q['after_top']*100:+.1f}% the next week, "
-                     f"versus {q['after_bottom']*100:+.1f}% after the weakest (p = {q['p']:.2f}).")
+    if q["after_top"] is not None and q["after_bottom"] is not None:
+        parts.append(f"After the strongest quarter of {xl} weeks, {yl[0].lower() + yl[1:]} grew {q['after_top']*100:+.1f}% the next week, "
+                     f"versus {q['after_bottom']*100:+.1f}% after the weakest" + (f" (p = {q['p']:.2f})." if q["p"] is not None else " (too few weeks to test)."))
     return " ".join(parts)
 
 
@@ -151,14 +153,29 @@ def build() -> dict:
     w, meta = _weekly()
     g = _clean_growth(w)
     metrics = [m for m in METRICS if m in w and w[m].notna().sum() >= 30]
-    measures = [m for m in MEASURES if m in w and w[m].notna().sum() >= 30]
+    measures = [m for m in MEASURES if m in g and g[m].notna().sum() >= 30]  # >= 30 usable weekly changes
     pairs = {}
     for x in measures:
         for y in metrics:
             r = pair(g, w, x, y)
             r["sentence"] = _sentence(MEASURES[x], METRICS[y][0], r)
             pairs[f"{x}|{y}"] = r
+    # head-to-head: the hypothesis says Intents is the BETTER leading indicator than price
+    h2h = {}
+    for y in metrics:
+        i, pr = pairs.get(f"intents_usd|{y}"), pairs.get(f"near_price|{y}")
+        if not (i and pr):
+            continue
+        def lead_score(r):  # strongest positive significant lead at k >= 1, else 0
+            vals = [c["r"] for c in r["lead_lag"] if c["k"] >= 1 and c["p"] is not None and c["p"] < 0.05 and c["r"] > 0]
+            return max(vals) if vals else 0.0
+        li, lp = lead_score(i), lead_score(pr)
+        winner = ("Intents" if li > lp else "Price" if lp > li else "Neither leads")
+        h2h[y] = {"intents_same_week": i["same_week"], "price_same_week": pr["same_week"],
+                  "intents_leads": i["sig_leads"], "price_leads": pr["sig_leads"],
+                  "intents_best_lead_r": li, "price_best_lead_r": lp, "better_leading_indicator": winner}
     out = {
+        "head_to_head": h2h,
         "meta": {"built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                  "first_week": w.index[0].strftime("%Y-%m-%d"), "last_week": w.index[-1].strftime("%Y-%m-%d"),
                  "weeks": int(len(w)), "max_k": MAXK, "rolling_weeks": ROLL,
