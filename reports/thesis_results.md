@@ -47,5 +47,5 @@ Lead-lag correlations (weekly growth; k = weeks ahead; bold = p < 0.05):
 
 ## Data availability
 
-- BigQuery data ends 2026-11-12 (freshness check: {'receipt_actions': {'latest': '2026-11-13', 'rows': 23336462900}, 'transactions': {'latest': '2026-11-13', 'rows': 5486068138}, 'checked_at': '2026-11-13T16:50:39Z'}); used for the current window: True.
+- BigQuery data ends 2026-11-12 (freshness check: {'receipt_actions': {'latest': '2026-11-13', 'rows': 23336698034}, 'transactions': {'latest': '2026-11-13', 'rows': 5486112855}, 'checked_at': '2026-11-13T17:18:11Z'}); used for the current window: True.
 - Explorer API sample: 1362 sampled hours.
