@@ -168,33 +168,73 @@ def avax_market() -> pd.DataFrame:
 
 # ---------------------------------------------------------- DefiLlama ----
 def llama(chain: str) -> pd.DataFrame:
-    name, slug = LLAMA_CHAINS[chain], LLAMA_SLUGS[chain]
+    return llama_chain(LLAMA_CHAINS[chain], LLAMA_SLUGS[chain])
 
-    tvl = _get(f"https://api.llama.fi/v2/historicalChainTvl/{name}")
-    tvl = pd.Series({pd.Timestamp(r["date"], unit="s").normalize(): r["tvl"] for r in tvl})
+
+def llama_chain(name: str, slug: str) -> pd.DataFrame:
+    """TVL, DEX volume, fees, revenue and stablecoins for one chain. A series
+    DefiLlama does not publish for that chain is left empty (NaN)."""
+    def safe(fn):
+        try:
+            return fn()
+        except RuntimeError:
+            return pd.Series(dtype=float)
+
+    def tvl_fn():
+        rows = _get(f"https://api.llama.fi/v2/historicalChainTvl/{name}")
+        return pd.Series({pd.Timestamp(r["date"], unit="s").normalize(): r["tvl"] for r in rows})
 
     def dim(url):
         d = _get(url, {"excludeTotalDataChartBreakdown": "true"})
         return pd.Series({pd.Timestamp(t, unit="s").normalize(): v for t, v in d.get("totalDataChart", [])})
 
-    dex = dim(f"https://api.llama.fi/overview/dexs/{slug}")
-    fees = dim(f"https://api.llama.fi/summary/fees/{slug}?dataType=dailyFees")
-    rev = dim(f"https://api.llama.fi/summary/fees/{slug}?dataType=dailyRevenue")
+    def stable_fn():
+        st = _get(f"https://stablecoins.llama.fi/stablecoincharts/{name}")
+        return pd.Series({pd.Timestamp(int(r["date"]), unit="s").normalize():
+                          sum((r.get("totalCirculatingUSD") or {}).values()) for r in st})
 
-    st = _get(f"https://stablecoins.llama.fi/stablecoincharts/{name}")
-    stable = pd.Series(
-        {
-            pd.Timestamp(int(r["date"]), unit="s").normalize(): sum((r.get("totalCirculatingUSD") or {}).values())
-            for r in st
-        }
-    )
-
-    df = pd.DataFrame(
-        {"tvl_usd": tvl, "dex_volume_usd": dex, "fees_usd": fees, "revenue_usd": rev, "stablecoins_usd": stable}
-    )
+    df = pd.DataFrame({
+        "tvl_usd": safe(tvl_fn),
+        "dex_volume_usd": safe(lambda: dim(f"https://api.llama.fi/overview/dexs/{slug}")),
+        "fees_usd": safe(lambda: dim(f"https://api.llama.fi/summary/fees/{slug}?dataType=dailyFees")),
+        "revenue_usd": safe(lambda: dim(f"https://api.llama.fi/summary/fees/{slug}?dataType=dailyRevenue")),
+        "stablecoins_usd": safe(stable_fn),
+    })
     df = df.groupby(level=0).last()
     df.index.name = "date"
     return df[df.index >= START].sort_index()
+
+
+# Optional comparison set. AVAX has its own full panel; these use DefiLlama
+# plus CoinGecko's keyless 365-day market-cap history.
+PEERS = {
+    # key: (DefiLlama chain name, DefiLlama slug, CoinGecko id)
+    "thorchain": ("Thorchain", "thorchain", "thorchain"),
+    "sui": ("Sui", "sui", "sui"),
+    "aptos": ("Aptos", "aptos", "aptos"),
+    "ton": ("TON", "ton", "the-open-network"),
+    "icp": ("ICP", "icp", "internet-computer"),
+    "cardano": ("Cardano", "cardano", "cardano"),
+}
+
+
+def peers() -> pd.DataFrame:
+    frames = []
+    for key, (name, slug, cg) in PEERS.items():
+        print(f"  peer {key}", flush=True)
+        df = llama_chain(name, slug)
+        mc = _get(f"https://api.coingecko.com/api/v3/coins/{cg}/market_chart",
+                  {"vs_currency": "usd", "days": 365, "interval": "daily"})
+        m = pd.DataFrame({
+            "price_usd": pd.Series({pd.Timestamp(t, unit="ms").normalize(): v for t, v in mc["prices"]}),
+            "market_cap_usd": pd.Series({pd.Timestamp(t, unit="ms").normalize(): v for t, v in mc["market_caps"]}),
+        }).groupby(level=0).last()
+        df = df.join(m, how="outer")
+        df["chain"] = key
+        df.index.name = "date"
+        frames.append(df[df.index >= START])
+        time.sleep(4)  # stay under CoinGecko's public rate limit
+    return pd.concat(frames).reset_index().set_index("date")
 
 
 # -------------------------------------------------------------- driver ----
@@ -228,6 +268,7 @@ def fetch_all(raw_dir: Path = RAW_DIR) -> None:
         "avax_market": avax_market,
         "near_llama": lambda: llama("near"),
         "avax_llama": lambda: llama("avax"),
+        "peers": peers,
     }
     for name, fn in jobs.items():
         print(f"fetch {name} ...", flush=True)

@@ -274,19 +274,6 @@ def snapshot(df: pd.DataFrame) -> dict:
     return {k: (None if v is None or (isinstance(v, float) and not np.isfinite(v)) else (float(v) if not isinstance(v, str) else v)) for k, v in s.items()}
 
 
-def relative_series(near: pd.DataFrame, avax: pd.DataFrame) -> pd.DataFrame:
-    """NEAR multiple divided by AVAX multiple (>1 = NEAR priced richer per unit)."""
-    def mult(df, num, den, flow):
-        d = df[den].rolling(30, min_periods=20).mean() * (365 if flow else 1)
-        return df[num] / d
-    idx = near.index.intersection(avax.index)
-    out = pd.DataFrame(index=idx)
-    for name, den, flow in [("mc_to_revenue", "revenue_usd", True), ("mc_to_tvl", "tvl_usd", False),
-                            ("mc_to_dex_volume", "dex_volume_usd", True), ("mc_to_active", "active_accounts", False)]:
-        out[name] = (mult(near, "market_cap_usd", den, flow) / mult(avax, "market_cap_usd", den, flow)).loc[idx]
-    return out
-
-
 def backtest(df: pd.DataFrame, horizon: int = 90) -> list[dict]:
     """Forward price return after each Confidence Premium bucket. Descriptive
     only: overlapping windows, small sample, one market regime."""
@@ -322,8 +309,15 @@ def build() -> dict:
         scores[c], vals[c], indices[c] = sc, v, idx
         df.join(sc.add_prefix("score_")).join(idx).to_csv(PROCESSED / f"{c}_daily.csv", float_format="%.6g")
 
-    rel = relative_series(panels["near"], panels["avax"])
-    rel.to_csv(PROCESSED / "relative_near_vs_avax.csv", float_format="%.6g")
+    # NEAR on its own: fair value, multiples vs history, verdict.
+    from pipeline.valuation import near_standalone, fv_backtest, verdict_series
+    from pipeline import compare as C
+    nv = near_standalone(panels["near"], indices["near"]["confidence_premium"])
+    fv, mpct = nv.pop("_fv"), nv.pop("_mpct")
+    vseries = verdict_series(fv, indices["near"]["confidence_premium"], mpct["median"])
+    fv.join(mpct.add_prefix("pct_")).assign(verdict=vseries).to_csv(PROCESSED / "near_valuation.csv", float_format="%.6g")
+    nv["backtest"] = fv_backtest(fv, panels["near"]["price_usd"])
+
     snaps = {c: snapshot(df) for c, df in panels.items()}
     sens = sensitivity(scores, vals)
     bt = {c: backtest(panels[c].join(indices[c][["confidence_premium"]])) for c in panels}
@@ -348,7 +342,23 @@ def build() -> dict:
                  "market_cap_usd", "price_usd"]
             },
         }
-    relw = rel.reindex(dates)
+    fvw, mpw, vsw = fv.reindex(dates), mpct.reindex(dates), vseries.reindex(dates)
+    nv["series"] = {
+        "market_cap_usd": _round(fvw["market_cap_usd"], 0),
+        "fair_value_low": _round(fvw["fair_value_low"], 0),
+        "fair_value_mid": _round(fvw["fair_value_mid"], 0),
+        "fair_value_high": _round(fvw["fair_value_high"], 0),
+        "fair_value_gap": _round(fvw["fair_value_gap"], 4),
+        "multiples_percentile": _round(mpw["median"], 1),
+        "verdict": [None if pd.isna(v) else v for v in vsw],
+    }
+
+    peer_raw = pd.read_csv(RAW / "peers.csv", parse_dates=["date"], index_col="date") if (RAW / "peers.csv").exists() else None
+    compare_out, event_out = None, None
+    if peer_raw is not None:
+        pp = C.peer_panels(peer_raw, panels["avax"])
+        compare_out = C.comparison(panels["near"], pp, dates)
+        event_out = C.event_study(panels["near"], pp)
     latest = {c: {k: (None if pd.isna(v) else round(float(v), 1)) for k, v in indices[c].loc[end].items()} for c in panels}
 
     out = {
@@ -363,7 +373,9 @@ def build() -> dict:
         },
         "dates": [d.strftime("%Y-%m-%d") for d in dates],
         "series": series,
-        "relative": {k: _round(relw[k], 3) for k in relw.columns},
+        "near": nv,
+        "compare": compare_out,
+        "event_study": event_out,
         "latest": latest,
         "snapshot": snaps,
         "sensitivity": sens,

@@ -3,35 +3,35 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NEAR Confidence Index</title>
-<meta name="description" content="Is the market paying more or less for NEAR than its usage, DeFi and tokenomics justify? A re-runnable index, compared with AVAX, refreshed daily from public data.">
+<title>NEAR Valuation Check</title>
+<meta name="description" content="Is NEAR undervalued or overvalued? Three checks against NEAR's own on-chain fundamentals, refreshed daily from public data, with optional peer comparisons.">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.34.0/plotly.min.js"></script>
 <style>
 :root {
   color-scheme: light;
   --bg: #f6f5f2; --surface: #fcfcfb; --border: #e3e1db; --grid: #ecebe6;
   --text: #0b0b0b; --text-2: #52514e; --text-3: #7a7973;
-  --near: #2a78d6; --avax: #eb6834; --fund: #0b0b0b;
+  --near: #2a78d6; --peer: #eb6834; --control: #1baf7a; --fund: #0b0b0b; --band: rgba(42,120,214,0.14);
   --p-network: #1baf7a; --p-defi: #6250d6; --p-tokenomics: #e87ba4;
-  --pos: #1c5cab; --neg: #b8401c; --zero: #9a9890;
+  --over: #b8401c; --under: #1c7a52; --fair: #52514e; --zero: #9a9890;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #111110; --surface: #1a1a19; --border: #2e2d2b; --grid: #272624;
     --text: #f0efec; --text-2: #c3c2b7; --text-3: #8e8d86;
-    --near: #3987e5; --avax: #d95926; --fund: #f0efec;
+    --near: #3987e5; --peer: #d95926; --control: #199e70; --fund: #f0efec; --band: rgba(57,135,229,0.20);
     --p-network: #199e70; --p-defi: #9085e9; --p-tokenomics: #d55181;
-    --pos: #6da7ec; --neg: #e8845a; --zero: #6b6a64;
+    --over: #e8845a; --under: #4cc495; --fair: #c3c2b7; --zero: #6b6a64;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #111110; --surface: #1a1a19; --border: #2e2d2b; --grid: #272624;
   --text: #f0efec; --text-2: #c3c2b7; --text-3: #8e8d86;
-  --near: #3987e5; --avax: #d95926; --fund: #f0efec;
+  --near: #3987e5; --peer: #d95926; --control: #199e70; --fund: #f0efec; --band: rgba(57,135,229,0.20);
   --p-network: #199e70; --p-defi: #9085e9; --p-tokenomics: #d55181;
-  --pos: #6da7ec; --neg: #e8845a; --zero: #6b6a64;
+  --over: #e8845a; --under: #4cc495; --fair: #c3c2b7; --zero: #6b6a64;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
@@ -40,24 +40,29 @@ main { max-width: 1120px; margin: 0 auto; padding: 32px 16px 64px; }
 header h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
 header p { margin: 0 0 6px; color: var(--text-2); max-width: 760px; }
 .meta { font-size: 13px; color: var(--text-3); display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; }
-.meta a, a { color: var(--near); }
+a { color: var(--near); }
 h2 { font-size: 18px; margin: 40px 0 4px; }
+h2.part { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-top: 56px; border-top: 1px solid var(--border); padding-top: 24px; }
 .lede { color: var(--text-2); margin: 0 0 14px; max-width: 780px; font-size: 14px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
-.tile h3 { margin: 0 0 10px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.kpi .v { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.kpi .l { font-size: 12px; color: var(--text-3); }
-.read { margin: 10px 0 0; font-size: 13px; color: var(--text-2); }
+.hero { margin-top: 24px; display: grid; grid-template-columns: 1.1fr 2fr; gap: 12px; }
+.verdict .k { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.verdict .v { font-size: 34px; font-weight: 700; line-height: 1.15; margin: 4px 0 8px; }
+.verdict .s { font-size: 14px; color: var(--text-2); }
+.signals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.sig .t { font-size: 12px; color: var(--text-3); }
+.sig .r { font-size: 15px; font-weight: 600; margin: 2px 0 6px; display: flex; align-items: center; gap: 6px; }
+.sig .n { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sig .d { font-size: 12.5px; color: var(--text-2); margin-top: 4px; }
+.badge { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: 0.04em; }
+.over { color: var(--over); } .under { color: var(--under); } .fair { color: var(--fair); }
 .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .chart { width: 100%; height: 340px; }
 .chart.sm { height: 280px; }
 .ctitle { font-size: 13px; font-weight: 600; margin: 0 0 4px; color: var(--text-2); }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; color: var(--text-2); }
 select, button { font: inherit; font-size: 13px; color: var(--text); background: var(--surface);
-  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
 button[aria-pressed="true"] { border-color: var(--text-2); font-weight: 600; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 th, td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: right; }
@@ -66,20 +71,21 @@ th { color: var(--text-3); font-weight: 600; }
 .tablewrap { overflow-x: auto; }
 .method { font-size: 14px; color: var(--text-2); }
 .method code { font-size: 12.5px; }
-.err { color: var(--neg); }
+.err { color: var(--over); }
+.note { font-size: 12.5px; color: var(--text-3); margin-top: 8px; }
+#compare-body[hidden] { display: none; }
 @media (max-width: 760px) {
-  .tiles, .grid2 { grid-template-columns: 1fr; }
-  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero, .grid2, .signals { grid-template-columns: 1fr; }
   header h1 { font-size: 23px; }
+  .verdict .v { font-size: 28px; }
 }
 </style>
 </head>
 <body>
 <main>
 <header>
-  <h1>NEAR Confidence Index</h1>
-  <p>Is the market paying more or less for NEAR than its usage, DeFi activity and tokenomics justify, and how does that compare with Avalanche?</p>
-  <p>Each score is a percentile from 0 to 100 against the chain's own trailing 365 days. The <b>Confidence Premium</b> is the Valuation Index minus the Fundamentals Index. Above 0, investors are paying ahead of fundamentals. Below 0, the price lags what the chain is doing.</p>
+  <h1>Is NEAR undervalued or overvalued?</h1>
+  <p>Three independent checks of NEAR's market cap against NEAR's own on-chain fundamentals: usage, DeFi and tokenomics. No other chain is needed for the verdict. Peer comparisons are optional, at the bottom.</p>
   <div class="meta">
     <span id="asof">Loading data…</span>
     <span>Refreshed daily by GitHub Actions</span>
@@ -88,30 +94,36 @@ th { color: var(--text-3); font-weight: 600; }
   </div>
 </header>
 
-<section class="tiles" id="tiles"></section>
+<section class="hero">
+  <div class="card verdict" id="verdict"></div>
+  <div class="card signals" id="signals"></div>
+</section>
 
-<h2>Confidence Premium over time</h2>
-<p class="lede">Valuation Index minus Fundamentals Index, for each chain. Below 0, the price lags fundamentals relative to the past year. Above 0, investors are paying for more than the chain currently delivers.</p>
-<div class="card"><div id="c-premium" class="chart"></div></div>
+<h2>Market cap vs fair value</h2>
+<p class="lede">Fair value is what NEAR would be worth at its usual multiples on today's fundamentals. For each of revenue, DEX volume, TVL, stablecoins and returning accounts, today's figure is multiplied by NEAR's median multiple over the trailing 2 years. The fair value is the geometric mean of the five results. The band uses the 25th to 75th percentile multiples.</p>
+<div class="card"><div id="c-fv" class="chart"></div></div>
 
-<h2>Fundamentals vs valuation</h2>
-<p class="lede">The two indices behind the premium. Fundamentals is the equal-weight mean of the network, DeFi and tokenomics pillars. Valuation is the percentile of market cap.</p>
+<h2>Valuation verdict over time</h2>
+<p class="lede">The verdict each day, from a majority vote of the three checks. It shows how often NEAR has looked rich or cheap against its own history.</p>
+<div class="card"><div id="c-verdict" class="chart sm"></div></div>
+
+<h2>Multiples vs NEAR's own history</h2>
+<p class="lede">Today's multiple, its 2-year median, and where today ranks in the last 2 years (0 = cheapest, 100 = richest). The "Fair value" column is the market cap that multiple implies at its median.</p>
+<div class="card tablewrap"><table id="mtable"></table></div>
+
+<h2>Confidence Premium</h2>
+<p class="lede">Valuation Index (market-cap percentile) minus Fundamentals Index (network, DeFi and tokenomics percentiles), both against NEAR's trailing 365 days. Above 0, investors are paying ahead of fundamentals.</p>
 <div class="grid2">
-  <div class="card"><p class="ctitle">NEAR</p><div id="c-fv-near" class="chart sm"></div></div>
-  <div class="card"><p class="ctitle">AVAX</p><div id="c-fv-avax" class="chart sm"></div></div>
+  <div class="card"><p class="ctitle">Confidence Premium</p><div id="c-premium" class="chart sm"></div></div>
+  <div class="card"><p class="ctitle">Fundamentals vs Valuation</p><div id="c-fv-idx" class="chart sm"></div></div>
 </div>
 
-<h2>The three pillars</h2>
+<h2>What drives the fundamentals</h2>
 <p class="lede">Network: active accounts, returning accounts, transactions, fees. DeFi: TVL, DEX volume, stablecoin supply. Tokenomics: staked share, net supply growth (lower scores higher), and the share of issuance offset by fee burn.</p>
-<div class="card">
-  <div class="controls" role="group" aria-label="Chain">
-    Chain <button data-pchain="near" aria-pressed="true">NEAR</button><button data-pchain="avax" aria-pressed="false">AVAX</button>
-  </div>
-  <div id="c-pillars" class="chart"></div>
-</div>
+<div class="card"><div id="c-pillars" class="chart"></div></div>
 
-<h2>Raw metrics, NEAR vs AVAX</h2>
-<p class="lede">Every input to the index, as a 7-day average. The scores above rank these values against each chain's own past year.</p>
+<h2>NEAR's raw metrics</h2>
+<p class="lede">Every input, as a 7-day average.</p>
 <div class="card">
   <div class="controls">
     <label>Metric <select id="metric"></select></label>
@@ -120,37 +132,51 @@ th { color: var(--text-3); font-weight: 600; }
   <div id="c-metric" class="chart"></div>
 </div>
 
-<h2>Relative valuation: NEAR's multiple ÷ AVAX's multiple</h2>
-<p class="lede">Above 1, the market pays more for each dollar of NEAR's activity than for the same activity on AVAX. Denominators are 30-day averages, annualised for flows.</p>
-<div class="card">
-  <div class="controls"><label>Multiple <select id="relsel">
-    <option value="mc_to_revenue">Market cap / revenue (fees burned)</option>
-    <option value="mc_to_tvl">Market cap / TVL</option>
-    <option value="mc_to_dex_volume">Market cap / DEX volume</option>
-    <option value="mc_to_active">Market cap / active account</option>
-  </select></label></div>
-  <div id="c-rel" class="chart"></div>
+<h2>How reliable are these readings?</h2>
+<p class="lede">First, the Confidence Premium recomputed under 2,000 random weightings. Second, price change over the 90 days after each reading. The second is descriptive only: the windows overlap and cover a single two-year regime, so it isn't a trading signal.</p>
+<div class="grid2">
+  <div class="card tablewrap"><p class="ctitle">Premium under random weights</p><table id="sens"></table></div>
+  <div class="card tablewrap"><p class="ctitle">90-day forward price change</p><table id="bt"></table></div>
 </div>
 
-<h2>Cross-chain snapshot</h2>
-<p class="lede" id="snaplede">Trailing 30 days.</p>
-<div class="card tablewrap"><table id="snap"></table></div>
+<h2 class="part">Optional: compare with other chains</h2>
+<p class="lede">The verdict above uses NEAR's data only. Choose a peer to add context. <b>AVAX</b> is a similar-sized L1. <b>THORChain</b> runs the same business as NEAR Intents: cross-chain swaps. The <b>L1 basket</b> is the median of AVAX, Sui, Aptos, TON, ICP and Cardano, which controls for the whole market.</p>
+<div class="card">
+  <div class="controls" role="group" aria-label="Compare with">
+    Compare with
+    <button data-peer="none" aria-pressed="true">Nothing (NEAR only)</button>
+    <button data-peer="avax" aria-pressed="false">AVAX</button>
+    <button data-peer="thorchain" aria-pressed="false">THORChain</button>
+    <button data-peer="basket" aria-pressed="false">L1 basket</button>
+  </div>
+  <div id="compare-body" hidden>
+    <div class="controls"><label>Multiple <select id="cmpsel"></select></label></div>
+    <div id="c-cmp" class="chart"></div>
+    <p class="note" id="cmpnote"></p>
+    <div class="tablewrap"><table id="cmptable"></table></div>
+  </div>
+</div>
 
-<h2>How robust is the conclusion?</h2>
-<p class="lede">The premium recomputed under 2,000 random weightings. Pillar weights are drawn from a flat Dirichlet, and each metric's weight is scaled by 0.25 to 1.75×. If the sign holds across most draws, the reading doesn't depend on the weights chosen.</p>
-<div class="card tablewrap"><table id="sens"></table></div>
-
-<h2>Does the premium predict returns?</h2>
-<p class="lede">Price change over the 90 days after each premium reading, grouped by bucket. The windows overlap and cover a single two-year regime. Read this as description, not a trading signal.</p>
-<div class="card tablewrap"><table id="bt"></table></div>
+<h2>Pump.fun integration: how did each chain respond?</h2>
+<p class="lede">Pump.fun's app added NEAR tokens on <b>2026-11-04</b> and Avalanche tokens shortly after (<b>2026-11-05</b>, approximate). Each line is indexed to that chain's own 14 days before go-live (= 100). The control is the median of L1s Pump.fun didn't add (Sui, Aptos, TON, ICP, Cardano), with DefiLlama metrics only. This describes what happened next; it doesn't establish cause.</p>
+<div class="card">
+  <div class="controls"><label>Metric <select id="evsel">
+    <option value="active_accounts">Active accounts</option>
+    <option value="txns">Transactions</option>
+    <option value="fees_usd">Fees (USD)</option>
+    <option value="dex_volume_usd">DEX volume (USD)</option>
+  </select></label></div>
+  <div id="c-event" class="chart sm"></div>
+  <div class="tablewrap"><table id="evtable"></table></div>
+</div>
 
 <h2>Method and sources</h2>
 <div class="card method">
-  <p><b>Scores.</b> Each metric is smoothed with a 7-day mean (log scale for sizes). It is then ranked as a percentile against that chain's trailing 365 days. The rank uses past data only, so there is no look-ahead. Pillars are equal-weight means of the available metrics, and Fundamentals is the equal-weight mean of the pillars. Valuation is the same percentile applied to market cap.</p>
-  <p><b>Why percentiles against the chain's own history.</b> NEAR and AVAX count accounts and fees differently. Comparing each chain with its own past avoids mixing units. The cross-chain comparison happens in the multiples instead: NEAR's multiple divided by AVAX's.</p>
-  <p><b>Definitions.</b> Active accounts are daily distinct signers: NearBlocks for NEAR, <code>activeSenders</code> on the C-chain for AVAX. Returning accounts are active minus new. Revenue is fees burned: 70% of NEAR fees (the other 30% goes to contract developers) and 100% of AVAX C-chain fees. AVAX covers the C-chain only, not Avalanche L1s.</p>
-  <p><b>Sources (all public, no API keys).</b> NEAR: <a href="https://api.nearblocks.io/v1/charts">NearBlocks</a> and NEAR RPC for stake. AVAX: <a href="https://metrics.avax.network">Avalanche Data API</a>, CoinGecko for circulating supply, and DefiLlama for price. Both chains: <a href="https://defillama.com">DefiLlama</a> for TVL, DEX volume, stablecoins, fees and revenue.</p>
-  <p><b>Known limits.</b> NEAR stake history isn't available without an API key, so the pipeline saves one stake snapshot per run. NEAR's staking score starts once 180 snapshots exist; until then the NEAR tokenomics pillar uses supply growth and burn only. AVAX circulating supply before CoinGecko's 365-day window is extrapolated for market cap only, and supply-based AVAX metrics are left empty for that period. Neither chain has a protocol-level token buyback, so burn is the only supply sink measured.</p>
+  <p><b>Verdict.</b> Majority of three checks. <i>Fair value</i>: market cap above the fair-value band counts as overvalued, below it as undervalued. <i>Confidence Premium</i>: +15 or more is overvalued, −15 or less is undervalued. <i>Multiples vs history</i>: a median percentile of 75 or more is overvalued, 25 or less is undervalued. If no two checks agree, the verdict is "Mixed".</p>
+  <p><b>No look-ahead.</b> Every score, band and percentile uses only data up to that day. The fair value and multiple ranks use a trailing 2-year window (at least 1 year); the index scores use a trailing 365-day window.</p>
+  <p><b>Definitions.</b> Revenue = fees burned: 70% of NEAR fees burn, and the other 30% goes to contract developers. Active accounts = daily distinct signers. Returning accounts = active minus new. Flows such as revenue and DEX volume are 30-day averages, annualised.</p>
+  <p><b>Sources (all public, no API keys).</b> NEAR: <a href="https://api.nearblocks.io/v1/charts">NearBlocks</a> and NEAR RPC for stake. Peers: <a href="https://metrics.avax.network">Avalanche Data API</a>, <a href="https://defillama.com">DefiLlama</a>, and CoinGecko for market caps. Pump.fun dates come from secondary reports, since Pump.fun's own announcement wasn't found.</p>
+  <p><b>Known limits.</b> NEAR stake history isn't available without a key, so the pipeline saves one stake snapshot per run; the staking score joins the index after 180 snapshots. Peer market caps cover only the last 365 days, which is CoinGecko's public limit. Neither NEAR nor the peers have a protocol buyback, so burn is the only supply sink measured.</p>
 </div>
 </main>
 
@@ -158,143 +184,172 @@ th { color: var(--text-3); font-weight: 600; }
 (function () {
   const $ = (s) => document.querySelector(s);
   const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  let D = null, pChain = "near", logScale = true;
+  let D = null, logScale = true, peer = "none";
 
   const fmtUsd = (v) => v == null ? "n/a" : (Math.abs(v) >= 1e9 ? "$" + (v / 1e9).toFixed(2) + "B" :
-    Math.abs(v) >= 1e6 ? "$" + (v / 1e6).toFixed(2) + "M" : Math.abs(v) >= 1e3 ? "$" + (v / 1e3).toFixed(1) + "K" : "$" + v.toFixed(2));
-  const fmtX = (v) => v == null ? "n/a" : (Math.abs(v) < 10 ? v.toFixed(2) : Math.round(v).toLocaleString()) + "×";
+    Math.abs(v) >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : Math.abs(v) >= 1e3 ? "$" + (v / 1e3).toFixed(1) + "K" : "$" + v.toFixed(2));
+  const fmtX = (v) => v == null ? "n/a" : (Math.abs(v) < 1 ? v.toFixed(3) : Math.abs(v) < 10 ? v.toFixed(2) : Math.round(v).toLocaleString()) + "×";
   const fmtPct = (v, s) => v == null ? "n/a" : (s && v > 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
-  const fmtN = (v) => v == null ? "n/a" : Math.round(v).toLocaleString();
   const fmtS = (v) => v == null ? "n/a" : (v > 0 ? "+" : "") + v.toFixed(1);
-
-  function reading(p) {
-    if (p == null) return "Not enough history yet.";
-    if (p <= -15) return "Valuation lags fundamentals: investors are paying less than recent usage supports.";
-    if (p >= 15) return "Valuation is ahead of fundamentals: investors are paying a confidence premium.";
-    return "Valuation is roughly in line with fundamentals.";
-  }
+  const cls = (s) => s === "overvalued" || s === "Overvalued" ? "over" : (s === "undervalued" || s === "Undervalued" ? "under" : "fair");
+  const MULT_LABEL = { mc_to_revenue: "Market cap / revenue", mc_to_dex_volume: "Market cap / DEX volume",
+    mc_to_tvl: "Market cap / TVL", mc_to_stablecoins: "Market cap / stablecoins", mc_to_returning_accounts: "Market cap per returning account" };
+  const MULT_USD = new Set(["mc_to_returning_accounts"]);
 
   function layout(extra) {
     return Object.assign({
-      margin: { l: 48, r: 12, t: 8, b: 32 },
+      margin: { l: 56, r: 12, t: 8, b: 32 },
       paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
       font: { family: "ui-sans-serif, system-ui, sans-serif", size: 12, color: css("--text-2") },
       hovermode: "x unified",
       hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--border"), font: { color: css("--text") } },
-      legend: { orientation: "h", y: 1.12, x: 0, font: { color: css("--text-2") } },
+      legend: { orientation: "h", y: 1.14, x: 0, font: { color: css("--text-2") } },
       xaxis: { gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false },
       yaxis: { gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false },
     }, extra || {});
   }
+  const yax = (extra) => Object.assign({ gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false }, extra || {});
   const cfg = { displayModeBar: false, responsive: true };
-  const line = (name, y, color, extra) => Object.assign({ type: "scatter", mode: "lines", name, x: D.dates, y,
+  const line = (name, y, color, extra, x) => Object.assign({ type: "scatter", mode: "lines", name, x: x || D.dates, y,
     line: { color, width: 2 }, connectgaps: false }, extra || {});
+  const hline = (y) => ({ type: "line", xref: "paper", x0: 0, x1: 1, y0: y, y1: y, line: { color: css("--zero"), width: 1, dash: "dot" } });
 
-  function tiles() {
-    $("#tiles").innerHTML = ["near", "avax"].map((c) => {
-      const L = D.latest[c], S = D.snapshot[c];
-      return `<div class="card tile"><h3><span class="dot" style="background:var(--${c})"></span>${c.toUpperCase()}</h3>
-        <div class="kpis">
-          <div class="kpi"><div class="v">${L.fundamentals == null ? "–" : L.fundamentals.toFixed(1)}</div><div class="l">Fundamentals</div></div>
-          <div class="kpi"><div class="v">${L.valuation == null ? "–" : L.valuation.toFixed(1)}</div><div class="l">Valuation</div></div>
-          <div class="kpi"><div class="v">${fmtS(L.confidence_premium)}</div><div class="l">Confidence Premium</div></div>
-          <div class="kpi"><div class="v">${fmtX(S.mc_to_revenue)}</div><div class="l">Market cap / revenue</div></div>
-        </div><p class="read">${reading(L.confidence_premium)}</p></div>`;
-    }).join("");
+  function hero() {
+    const N = D.near, S = N.signals;
+    const gap = N.fair_value_gap;
+    $("#verdict").innerHTML = `<div class="k">NEAR verdict · ${N.as_of}</div>
+      <div class="v ${cls(N.verdict)}">${N.verdict}</div>
+      <div class="s">Market cap <b>${fmtUsd(N.market_cap_usd)}</b> ($${N.price_usd.toFixed(2)}) against a fair value of <b>${fmtUsd(N.fair_value_mid)}</b> ($${N.implied_price_mid.toFixed(2)}).
+      Fair-value band ${fmtUsd(N.fair_value_low)} to ${fmtUsd(N.fair_value_high)}. Market cap is ${fmtPct(Math.abs(gap))} ${gap >= 0 ? "above" : "below"} the midpoint.</div>`;
+    const sig = (title, s, num, desc) => `<div class="sig"><div class="t">${title}</div>
+      <div class="r ${cls(s)}"><span class="badge">${s}</span></div><div class="n">${num}</div><div class="d">${desc}</div></div>`;
+    $("#signals").innerHTML =
+      sig("1 · Fair value", S.fair_value, fmtPct(gap, true) + " vs midpoint", "Market cap is " +
+        (N.market_cap_usd > N.fair_value_high ? "above" : N.market_cap_usd < N.fair_value_low ? "below" : "inside") +
+        " the fair-value band. Only a reading outside the band counts as over- or undervalued.") +
+      sig("2 · Confidence Premium", S.confidence_premium, fmtS(N.premium), "Valuation percentile minus fundamentals percentile, 365-day window. ±15 is the cut-off.") +
+      sig("3 · Multiples vs history", S.multiples_vs_history, Math.round(N.multiples_percentile) + "/100", "Median rank of today's five multiples in the last 2 years. 75 or more is rich, 25 or less is cheap.");
   }
 
-  function premium() {
-    const zero = { type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, line: { color: css("--zero"), width: 1, dash: "dot" } };
-    Plotly.react("c-premium", [
-      line("NEAR", D.series.near.index.confidence_premium, css("--near")),
-      line("AVAX", D.series.avax.index.confidence_premium, css("--avax")),
-    ], layout({ shapes: [zero], yaxis: { gridcolor: css("--grid"), zeroline: false, range: [-100, 100], title: { text: "Valuation − Fundamentals" } } }), cfg);
+  function fvChart() {
+    const s = D.near.series;
+    Plotly.react("c-fv", [
+      line("Band low", s.fair_value_low, "rgba(0,0,0,0)", { showlegend: false, hoverinfo: "skip" }),
+      line("Fair-value band (25–75th pct multiples)", s.fair_value_high, "rgba(0,0,0,0)", { fill: "tonexty", fillcolor: css("--band"), hoverinfo: "skip" }),
+      line("Fair value", s.fair_value_mid, css("--near"), { line: { color: css("--near"), width: 2, dash: "dash" } }),
+      line("Market cap", s.market_cap_usd, css("--fund")),
+    ], layout({ yaxis: yax({ type: "log", tickformat: "$~s", dtick: "D2", hoverformat: "$,.3~s" }) }), cfg);
   }
 
-  function fv(c) {
-    Plotly.react("c-fv-" + c, [
-      line("Fundamentals", D.series[c].index.fundamentals, css("--fund")),
-      line("Valuation", D.series[c].index.valuation, css("--" + c), { line: { color: css("--" + c), width: 2, dash: "dash" } }),
-    ], layout({ yaxis: { gridcolor: css("--grid"), zeroline: false, range: [0, 100] } }), cfg);
+  function verdictChart() {
+    const v = D.near.series.verdict, map = { Undervalued: -1, "Fairly valued": 0, Mixed: 0, Overvalued: 1 };
+    const y = v.map((x) => x == null ? null : map[x]);
+    const colors = v.map((x) => x == null ? "rgba(0,0,0,0)" : css("--" + cls(x)));
+    Plotly.react("c-verdict", [{ type: "bar", x: D.dates, y: y.map((k) => k == null ? null : 1), base: y.map((k) => k == null ? null : k - 0.5),
+      marker: { color: colors }, text: v, hovertemplate: "%{x}<br>%{text}<extra></extra>", showlegend: false }],
+      layout({ bargap: 0, hovermode: "closest", yaxis: yax({ tickvals: [-1, 0, 1], ticktext: ["Undervalued", "Fair / mixed", "Overvalued"], range: [-1.6, 1.6], fixedrange: true }), margin: { l: 96, r: 12, t: 8, b: 32 } }), cfg);
   }
 
-  function pillars() {
-    const I = D.series[pChain].index;
+  function mTable() {
+    $("#mtable").innerHTML = "<thead><tr><th>Multiple</th><th>Today</th><th>2-year median</th><th>Rank (0–100)</th><th>Fair value at median</th></tr></thead><tbody>" +
+      D.near.multiples.map((m) => {
+        const f = MULT_USD.has(m.key) ? fmtUsd : fmtX;
+        const r = m.percentile_2y, c = r == null ? "" : (r >= 75 ? "over" : r <= 25 ? "under" : "");
+        return `<tr><td>${m.label}</td><td>${f(m.today)}</td><td>${f(m.median_2y)}</td><td class="${c}">${r == null ? "n/a" : r.toFixed(0)}</td><td>${fmtUsd(m.fair_value)}</td></tr>`;
+      }).join("") + `<tr><td><b>Combined (geometric mean)</b></td><td>${fmtUsd(D.near.market_cap_usd)}</td><td></td><td><b>${Math.round(D.near.multiples_percentile)}</b></td><td><b>${fmtUsd(D.near.fair_value_mid)}</b></td></tr></tbody>`;
+  }
+
+  function idxCharts() {
+    const I = D.series.near.index;
+    Plotly.react("c-premium", [line("NEAR", I.confidence_premium, css("--near"))],
+      layout({ showlegend: false, shapes: [hline(15), hline(-15), hline(0)], yaxis: yax({ range: [-100, 100] }) }), cfg);
+    Plotly.react("c-fv-idx", [
+      line("Fundamentals", I.fundamentals, css("--fund")),
+      line("Valuation", I.valuation, css("--near"), { line: { color: css("--near"), width: 2, dash: "dash" } }),
+    ], layout({ yaxis: yax({ range: [0, 100] }) }), cfg);
     Plotly.react("c-pillars", [
       line("Network", I.network, css("--p-network")),
       line("DeFi", I.defi, css("--p-defi")),
       line("Tokenomics", I.tokenomics, css("--p-tokenomics")),
       line("Fundamentals", I.fundamentals, css("--fund"), { line: { color: css("--fund"), width: 2.5 } }),
-    ], layout({ yaxis: { gridcolor: css("--grid"), zeroline: false, range: [0, 100] } }), cfg);
+    ], layout({ yaxis: yax({ range: [0, 100] }) }), cfg);
   }
 
   const RATIO = new Set(["retention_ratio", "staking_ratio", "net_issuance_ann", "burn_offset"]);
   function metric() {
-    const m = $("#metric").value;
-    const isRatio = RATIO.has(m);
-    const ylog = logScale && !isRatio && m !== "net_issuance_ann";
-    const tf = isRatio ? ".1%" : (m.endsWith("_usd") ? "$~s" : "~s");
-    Plotly.react("c-metric", [
-      line("NEAR", D.series.near.metrics[m], css("--near")),
-      line("AVAX", D.series.avax.metrics[m], css("--avax")),
-    ], layout({ yaxis: { gridcolor: css("--grid"), zeroline: false, type: ylog ? "log" : "linear", tickformat: tf, dtick: ylog ? "D2" : undefined, hoverformat: isRatio ? ".2%" : ",.3~s" } }), cfg);
+    const m = $("#metric").value, isRatio = RATIO.has(m);
+    const ylog = logScale && !isRatio;
+    Plotly.react("c-metric", [line("NEAR", D.series.near.metrics[m], css("--near"))],
+      layout({ showlegend: false, yaxis: yax({ type: ylog ? "log" : "linear", dtick: ylog ? "D2" : undefined,
+        tickformat: isRatio ? ".1%" : (m.endsWith("_usd") ? "$~s" : "~s"), hoverformat: isRatio ? ".2%" : ",.3~s" }) }), cfg);
   }
 
-  function relative() {
-    const k = $("#relsel").value;
-    const one = { type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: css("--zero"), width: 1, dash: "dot" } };
-    Plotly.react("c-rel", [line("NEAR ÷ AVAX", D.relative[k], css("--near"))],
-      layout({ shapes: [one], showlegend: false, yaxis: { gridcolor: css("--grid"), zeroline: false, type: "log", dtick: "D2", hoverformat: ".2f" } }), cfg);
+  function relTables() {
+    const R = D.sensitivity.near;
+    $("#sens").innerHTML = "<thead><tr><th></th><th>Median</th><th>5th pct</th><th>95th pct</th><th>Below 0</th></tr></thead><tbody>" +
+      `<tr><td>NEAR premium</td><td>${fmtS(R.median)}</td><td>${fmtS(R.p05)}</td><td>${fmtS(R.p95)}</td><td>${(R.share_negative * 100).toFixed(0)}%</td></tr></tbody>`;
+    const rows = D.near.backtest.concat(D.backtest.rows.near);
+    $("#bt").innerHTML = "<thead><tr><th>After…</th><th>Days</th><th>Median</th><th>Positive</th></tr></thead><tbody>" +
+      rows.map((r) => `<tr><td>${r.bucket}</td><td>${r.days}</td><td>${fmtPct(r.median, true)}</td><td>${fmtPct(r.hit_rate)}</td></tr>`).join("") + "</tbody>";
   }
 
-  function snapTable() {
-    const S = D.snapshot, rows = [
-      ["Market cap", "market_cap_usd", fmtUsd], ["Fully diluted value", "fdv_usd", fmtUsd],
-      ["Fees, annualised", "fees_ann_usd", fmtUsd], ["Revenue (fees burned), annualised", "revenue_ann_usd", fmtUsd],
-      ["DeFi TVL", "tvl_usd", fmtUsd], ["DEX volume, annualised", "dex_volume_ann_usd", fmtUsd],
-      ["Stablecoin supply", "stablecoins_usd", fmtUsd], ["Active accounts / day", "active_accounts_30d", fmtN],
-      ["Returning share of active", "retention_ratio_30d", (v) => fmtPct(v)], ["Transactions / day", "txns_30d_avg", fmtN],
-      ["Staked share of circulating", "staking_ratio", (v) => fmtPct(v)],
-      ["Net supply growth (annualised, 30d)", "net_issuance_ann", (v) => fmtPct(v, true)],
-      ["Issuance offset by burn (30d)", "burn_offset_30d", (v) => fmtPct(v)],
-      ["Market cap / revenue", "mc_to_revenue", fmtX], ["Market cap / fees", "mc_to_fees", fmtX],
-      ["Market cap / TVL", "mc_to_tvl", fmtX], ["FDV / TVL", "fdv_to_tvl", fmtX],
-      ["Market cap / DEX volume", "mc_to_dex_volume", fmtX], ["Market cap / stablecoins", "mc_to_stablecoins", fmtX],
-      ["Market cap per active account", "mc_per_active_account", fmtUsd], ["Revenue per active account / yr", "revenue_per_active_account", fmtUsd],
-      ["Active accounts, YoY", "yoy_active_accounts", (v) => fmtPct(v, true)], ["Fees, YoY", "yoy_fees_usd", (v) => fmtPct(v, true)],
-      ["TVL, YoY", "yoy_tvl_usd", (v) => fmtPct(v, true)], ["DEX volume, YoY", "yoy_dex_volume_usd", (v) => fmtPct(v, true)],
-      ["Stablecoins, YoY", "yoy_stablecoins_usd", (v) => fmtPct(v, true)], ["Market cap, YoY", "yoy_market_cap_usd", (v) => fmtPct(v, true)],
-    ];
-    $("#snaplede").textContent = `Trailing 30 days to ${S.near.as_of}. YoY compares the same 30-day window a year earlier.`;
-    $("#snap").innerHTML = "<thead><tr><th>Metric</th><th>NEAR</th><th>AVAX</th></tr></thead><tbody>" +
-      rows.map(([l, k, f]) => `<tr><td>${l}</td><td>${f(S.near[k])}</td><td>${f(S.avax[k])}</td></tr>`).join("") + "</tbody>";
-    const R = D.sensitivity;
-    $("#sens").innerHTML = "<thead><tr><th></th><th>Median</th><th>5th pct</th><th>95th pct</th><th>Draws below 0</th></tr></thead><tbody>" +
-      [["NEAR premium", "near"], ["AVAX premium", "avax"], ["NEAR − AVAX", "near_minus_avax"]].map(([l, k]) =>
-        `<tr><td>${l}</td><td>${fmtS(R[k].median)}</td><td>${fmtS(R[k].p05)}</td><td>${fmtS(R[k].p95)}</td><td>${(R[k].share_negative * 100).toFixed(0)}%</td></tr>`).join("") + "</tbody>";
+  function compare() {
+    const body = $("#compare-body");
+    body.hidden = peer === "none" || !D.compare;
+    if (body.hidden) return;
+    const C = D.compare, k = $("#cmpsel").value, P = C.multiples[peer];
+    const isUsd = MULT_USD.has(k);
+    Plotly.react("c-cmp", [
+      line("NEAR", C.multiples.near[k], css("--near")),
+      line(C.labels[peer], P[k], css("--peer")),
+    ], layout({ yaxis: yax({ type: "log", dtick: "D2", tickformat: isUsd ? "$~s" : "~s", hoverformat: isUsd ? "$,.3~s" : ",.3~g" }) }), cfg);
+    const hasPeer = (P[k] || []).some((v) => v != null);
+    $("#cmpnote").textContent = (hasPeer ? "" : `${C.labels[peer]} has no data for this multiple. `) +
+      (peer === "avax" ? "" : "Peer market caps cover only the last 365 days (CoinGecko public API).") +
+      (peer === "basket" ? ` Basket median needs at least 3 of: ${C.basket_members.join(", ")}.` : "");
+    const L = C.latest, G = C.growth;
+    const rows = Object.keys(MULT_LABEL).map((m) => {
+      const f = MULT_USD.has(m) ? fmtUsd : fmtX;
+      const a = L.near[m], b = L[peer][m];
+      return `<tr><td>${MULT_LABEL[m]}</td><td>${f(a)}</td><td>${f(b)}</td><td>${a != null && b ? (a / b).toFixed(2) + "×" : "n/a"}</td></tr>`;
+    }).join("");
+    const grow = [["TVL", "tvl_usd"], ["DEX volume", "dex_volume_usd"], ["Fees", "fees_usd"], ["Revenue", "revenue_usd"], ["Stablecoins", "stablecoins_usd"]]
+      .map(([l, c]) => `<tr><td>${l}, YoY</td><td>${fmtPct(G.near[c], true)}</td><td>${fmtPct(G[peer][c], true)}</td><td></td></tr>`).join("");
+    $("#cmptable").innerHTML = `<thead><tr><th>Latest</th><th>NEAR</th><th>${C.labels[peer]}</th><th>NEAR ÷ peer</th></tr></thead><tbody>${rows}${grow}</tbody>`;
   }
 
-  function btTable() {
-    $("#bt").innerHTML = "<thead><tr><th>Chain · bucket</th><th>Days</th><th>Median</th><th>Mean</th><th>Share positive</th></tr></thead><tbody>" +
-      ["near", "avax"].flatMap((c) => D.backtest.rows[c].map((r) =>
-        `<tr><td>${c.toUpperCase()} · ${r.bucket}</td><td>${r.days}</td><td>${fmtPct(r.median, true)}</td><td>${fmtPct(r.mean, true)}</td><td>${fmtPct(r.hit_rate)}</td></tr>`)).join("") + "</tbody>";
+  function event() {
+    const E = D.event_study;
+    if (!E) return;
+    const m = $("#evsel").value, S = E.series;
+    const tr = [line("NEAR", S.near[m], css("--near"), null, E.days), line("AVAX", S.avax[m], css("--peer"), null, E.days)];
+    if (S.control[m] && S.control[m].length) tr.push(line("Control: L1s not added", S.control[m], css("--control"), { line: { color: css("--control"), width: 2, dash: "dot" } }, E.days));
+    Plotly.react("c-event", tr, layout({
+      shapes: [hline(100), { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: css("--zero"), width: 1 } }],
+      xaxis: { gridcolor: css("--grid"), zeroline: false, title: { text: "Days from Pump.fun go-live" } },
+      yaxis: yax({ title: { text: "Index (pre-event avg = 100)" } }) }), cfg);
+    const sm = E.summary, cols = [["Active accounts", "active_accounts"], ["Transactions", "txns"], ["Fees", "fees_usd"], ["DEX volume", "dex_volume_usd"]];
+    const cell = (k, c) => (sm[k] && sm[k][c] != null) ? fmtS(sm[k][c]) + "%" : "n/a";
+    $("#evtable").innerHTML = `<thead><tr><th>Average change since go-live (${E.post_days} days)</th>${cols.map((c) => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>` +
+      [["NEAR (Nov 4)", "near"], ["AVAX (Nov 5, approx.)", "avax"], ["Control median", "control"]]
+        .map(([l, k]) => `<tr><td>${l}</td>${cols.map((c) => `<td>${cell(k, c[1])}</td>`).join("")}</tr>`).join("") + "</tbody>";
   }
 
-  function renderAll() { btTable(); tiles(); premium(); fv("near"); fv("avax"); pillars(); metric(); relative(); snapTable(); }
+  function renderAll() { hero(); fvChart(); verdictChart(); mTable(); idxCharts(); metric(); relTables(); compare(); event(); }
 
   fetch("data/dashboard.json", { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then((d) => {
     D = d;
     $("#asof").textContent = `Data as of ${d.meta.as_of} · built ${d.meta.built_at.replace("T", " ").replace("Z", " UTC")}`;
-    const sel = $("#metric");
     const order = ["active_accounts", "returning_accounts", "retention_ratio", "txns", "fees_usd", "revenue_usd", "tvl_usd",
       "dex_volume_usd", "stablecoins_usd", "staking_ratio", "net_issuance_ann", "burn_offset", "market_cap_usd", "price_usd"];
-    sel.innerHTML = order.map((k) => `<option value="${k}">${d.meta.labels[k] || k}</option>`).join("");
-    sel.onchange = metric; $("#relsel").onchange = relative;
+    $("#metric").innerHTML = order.map((k) => `<option value="${k}">${d.meta.labels[k] || k}</option>`).join("");
+    $("#cmpsel").innerHTML = Object.entries(MULT_LABEL).map(([k, l]) => `<option value="${k}">${l}</option>`).join("");
+    $("#metric").onchange = metric; $("#cmpsel").onchange = compare; $("#evsel").onchange = event;
     $("#logbtn").onclick = (e) => { logScale = !logScale; e.target.setAttribute("aria-pressed", logScale); metric(); };
-    document.querySelectorAll("[data-pchain]").forEach((b) => b.onclick = () => {
-      pChain = b.dataset.pchain;
-      document.querySelectorAll("[data-pchain]").forEach((x) => x.setAttribute("aria-pressed", x === b));
-      pillars();
+    document.querySelectorAll("[data-peer]").forEach((b) => b.onclick = () => {
+      peer = b.dataset.peer;
+      document.querySelectorAll("[data-peer]").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      compare();
     });
     renderAll();
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);

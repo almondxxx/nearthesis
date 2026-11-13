@@ -3,30 +3,36 @@
 Instructions for AI coding agents (Claude Code, Codex and others) that review, run or extend this repo.
 
 ## What this repo is
-A re-runnable investment-thesis model for NEAR, compared with AVAX (C-chain). A Python pipeline pulls public,
-keyless data and scores each chain on **network**, **DeFi** and **tokenomics** pillars. It combines them into a
-**Fundamentals Index**, compares that with a **Valuation Index** (market cap), and publishes the gap as the
-**Confidence Premium**. A static dashboard (`docs/`) renders the result.
+A re-runnable model that answers **"is NEAR undervalued or overvalued?"** from NEAR's own data. Three checks feed a
+majority verdict:
+1. fair value at NEAR's median 2-year multiples (`pipeline/valuation.py`);
+2. the Confidence Premium, Valuation Index minus Fundamentals Index (`pipeline/build.py`);
+3. multiples ranked against NEAR's own 2-year history.
+
+Peer comparisons (AVAX, THORChain, an L1 basket median) and a Pump.fun event study are optional context in
+`pipeline/compare.py`. **They must never feed the NEAR verdict.** A static dashboard (`docs/`) renders everything.
 
 ## Verify it in about 2 minutes
 ```bash
 pip install -r requirements.txt
 python run.py --offline                       # rebuild from committed data/raw/; no network needed
-python -m unittest discover -s tests -v       # 10 tests should pass
+python -m unittest discover -s tests -v       # all tests should pass
 python -m http.server -d docs 8000            # open http://localhost:8000
 ```
 `python run.py` (without `--offline`) fetches fresh data first. It needs network access to api.nearblocks.io,
 metrics.avax.network, api.llama.fi, coins.llama.fi, stablecoins.llama.fi, api.coingecko.com and rpc.mainnet.near.org.
 
 Expected: `run.py` prints both chains' fundamentals, valuation and premium, and writes
-`docs/data/dashboard.json` and `reports/latest.md`. Every figure in `THESIS.md` can be traced to
+`docs/data/dashboard.json` and `reports/latest.md`. The report opens with the NEAR verdict. Every figure in `THESIS.md` can be traced to
 `data/processed/{near,avax}_daily.csv` or `reports/latest.md` at the same snapshot date.
 
 ## Layout
 | Path | Role | Edit by hand? |
 |---|---|---|
 | `pipeline/sources.py` | One fetcher per source, writes `data/raw/*.csv` | yes |
-| `pipeline/build.py` | Panels, scoring, indices, multiples, sensitivity; writes outputs | yes |
+| `pipeline/build.py` | Panels, scoring, indices, sensitivity; writes outputs | yes |
+| `pipeline/valuation.py` | NEAR-only fair value, multiples percentiles, verdict, fair-value backtest | yes |
+| `pipeline/compare.py` | Optional peers (AVAX, THORChain, L1 basket) and Pump.fun event study | yes |
 | `pipeline/report.py` | Renders `reports/latest.md` | yes |
 | `run.py` | CLI entry point | yes |
 | `docs/index.html` | Dashboard; reads `docs/data/dashboard.json` at load time | yes |
@@ -44,7 +50,9 @@ Expected: `run.py` prints both chains' fundamentals, valuation and premium, and 
   AVAX = C-chain only. If you change a definition, update `LABELS`, the dashboard method section and `THESIS.md`.
 - **Don't invent data.** Leave unknown values as NaN or `null`. Never fill a series with made-up numbers. The one
   estimate (AVAX circulating supply before CoinGecko's 365-day window) is flagged as `supply_estimated` and is used only for market cap.
-- Dashboard: one y-axis per chart, NEAR is always blue and AVAX always orange, and the page must work at 390px width.
+- **The NEAR verdict is standalone.** Nothing from `compare.py` may change `near.verdict`.
+- **Pump.fun dates** live in `compare.PUMPFUN`. The AVAX date is flagged approximate; update it, with a source, if an exact date is confirmed.
+- Dashboard: one y-axis per chart, NEAR is always blue and the selected peer always orange, and the page must work at 390px width.
 
 ## Add a metric
 1. Fetch it in `pipeline/sources.py` (in the right `*_llama`, `near_*` or `avax_*` frame) and confirm it lands in `data/raw/`.
@@ -56,6 +64,6 @@ Expected: `run.py` prints both chains' fundamentals, valuation and premium, and 
 ## Reviewer checklist (hackathon screening)
 - [ ] `python run.py --offline` succeeds and prints both chains' indices.
 - [ ] Tests pass.
-- [ ] The dashboard loads with no console errors and shows the Confidence Premium, pillar and multiple charts.
+- [ ] The dashboard loads with no console errors. It shows the NEAR verdict with three signals and the fair-value chart. The "Compare with" buttons show peers.
 - [ ] `THESIS.md` numbers match `reports/latest.md` for the snapshot date stated at the top.
 - [ ] Every data source in the README is public and needs no key.

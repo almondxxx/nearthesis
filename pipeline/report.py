@@ -75,11 +75,43 @@ ROWS = [
 
 def write_report(d: dict, path: Path) -> None:
     m, L, S, sens = d["meta"], d["latest"], d["snapshot"], d["sensitivity"]
+    N = d["near"]
     lines = [
-        "# NEAR vs AVAX - latest numbers",
+        "# NEAR valuation check - latest numbers",
         "",
         f"_Generated automatically by `python run.py`. Data as of **{m['as_of']}** (fetched {m['fetched_at']}). "
         "Do not edit by hand: the next pipeline run overwrites this file._",
+        "",
+        f"## Verdict: **{N['verdict']}**",
+        "",
+        "| Check | Reading | Signal |",
+        "|---|---:|---|",
+        f"| 1. Fair value (NEAR's median multiples over 2 years) | market cap {_usd(N['market_cap_usd'])} vs fair value "
+        f"{_usd(N['fair_value_mid'])} (band {_usd(N['fair_value_low'])} - {_usd(N['fair_value_high'])}), "
+        f"{_pct(N['fair_value_gap'], True)} vs midpoint | {N['signals']['fair_value']} |",
+        f"| 2. Confidence Premium (valuation - fundamentals percentile) | {N['premium']:+.1f} | {N['signals']['confidence_premium']} |",
+        f"| 3. Multiples vs own 2-year history (median rank, 0-100) | {N['multiples_percentile']:.0f} | {N['signals']['multiples_vs_history']} |",
+        "",
+        f"Price {_usd(N['price_usd'])}; price implied by fair value midpoint {_usd(N['implied_price_mid'])}. "
+        "Verdict = majority of the three checks (Mixed if no two agree).",
+        "",
+        "| Multiple | Today | 2-year median | Rank (0-100) | Fair value at median |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for r in N["multiples"]:
+        f = _usd if r["key"] == "mc_to_returning_accounts" else _x
+        rank = "n/a" if r["percentile_2y"] is None else f"{r['percentile_2y']:.0f}"
+        lines.append(f"| {r['label']} | {f(r['today'])} | {f(r['median_2y'])} | {rank} | {_usd(r['fair_value'])} |")
+    lines += [
+        "",
+        "90-day forward price change by fair-value position (descriptive, overlapping windows):",
+        "",
+        "| After | Days | Median | Mean | Share positive |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for r in N["backtest"]:
+        lines.append(f"| {r['bucket']} | {r['days']} | {_pct(r['median'], True)} | {_pct(r['mean'], True)} | {_pct(r['hit_rate'])} |")
+    lines += [
         "",
         "## Indices (0-100, percentile vs the chain's own trailing 365 days)",
         "",
@@ -117,7 +149,7 @@ def write_report(d: dict, path: Path) -> None:
         "",
         "Overlapping windows over a single two-year regime: read this as a description, not a trading signal.",
         "",
-        "## Cross-chain snapshot (trailing 30 days)",
+        "## Appendix: NEAR vs AVAX snapshot (trailing 30 days)",
         "",
         "| Metric | NEAR | AVAX | NEAR / AVAX |",
         "|---|---:|---:|---:|",
@@ -135,4 +167,25 @@ def write_report(d: dict, path: Path) -> None:
         "so NEAR's staking score starts once enough snapshots accrue.",
         "",
     ]
+    C, E = d.get("compare"), d.get("event_study")
+    if C:
+        lines += ["## Optional: NEAR multiples vs peers (latest)", "",
+                  "| Multiple | NEAR | AVAX | THORChain | L1 basket median |", "|---|---:|---:|---:|---:|"]
+        for k in ["mc_to_revenue", "mc_to_dex_volume", "mc_to_tvl", "mc_to_stablecoins", "mc_to_returning_accounts"]:
+            f = _usd if k == "mc_to_returning_accounts" else _x
+            lines.append(f"| {k} | " + " | ".join(f(C["latest"][p].get(k)) for p in ["near", "avax", "thorchain", "basket"]) + " |")
+        lines += ["", "| YoY (30d vs same 30d last year) | NEAR | AVAX | THORChain | L1 basket median |", "|---|---:|---:|---:|---:|"]
+        for k in ["tvl_usd", "dex_volume_usd", "fees_usd", "revenue_usd", "stablecoins_usd"]:
+            lines.append(f"| {k} | " + " | ".join(_pct(C["growth"][p].get(k), True) for p in ["near", "avax", "thorchain", "basket"]) + " |")
+        lines.append("")
+    if E:
+        lines += [f"## Pump.fun integration event study ({E['post_days']} days after go-live)", "",
+                  "Average change vs each chain's 14 days before go-live. NEAR go-live 2026-11-04; AVAX 2026-11-05 (approximate); "
+                  "control = median of Sui, Aptos, TON, ICP, Cardano (DefiLlama metrics only). Descriptive, not causal.", "",
+                  "| | Active accounts | Transactions | Fees | DEX volume |", "|---|---:|---:|---:|---:|"]
+        for k in ["near", "avax", "control"]:
+            sm = E["summary"].get(k, {})
+            cell = lambda c: "n/a" if sm.get(c) is None else f"{sm[c]:+.1f}%"
+            lines.append(f"| {k.upper()} | {cell('active_accounts')} | {cell('txns')} | {cell('fees_usd')} | {cell('dex_volume_usd')} |")
+        lines.append("")
     path.write_text("\n".join(lines))

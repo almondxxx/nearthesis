@@ -46,6 +46,45 @@ class Combine(unittest.TestCase):
         self.assertAlmostEqual(out["fundamentals"].iloc[0], 60.0)
 
 
+class Valuation(unittest.TestCase):
+    def _panel(self, n=900, rich=1.0):
+        idx = pd.date_range("2023-01-01", periods=n, freq="D")
+        base = pd.Series(np.exp(np.linspace(0, 1, n)), index=idx)
+        df = pd.DataFrame({c: base * k for c, k in [("revenue_usd", 1e3), ("dex_volume_usd", 1e6), ("tvl_usd", 1e8),
+                                                     ("stablecoins_usd", 1e8), ("returning_accounts", 1e4)]})
+        df["market_cap_usd"] = base * 1e9
+        df.iloc[-1, df.columns.get_loc("market_cap_usd")] *= rich
+        return df
+
+    def test_constant_multiples_give_fair_value_equal_to_market_cap(self):
+        from pipeline.valuation import fair_value
+        fv = fair_value(self._panel())
+        last = fv.dropna(subset=["fair_value_mid"]).iloc[-1]
+        self.assertAlmostEqual(last["fair_value_gap"], 0.0, delta=0.02)
+
+    def test_rich_market_cap_is_above_band(self):
+        from pipeline.valuation import fair_value
+        fv = fair_value(self._panel(rich=3.0))
+        last = fv.iloc[-1]
+        self.assertGreater(last["market_cap_usd"], last["fair_value_high"])
+
+    def test_fair_value_has_no_lookahead(self):
+        from pipeline.valuation import fair_value
+        df = self._panel()
+        full = fair_value(df)["fair_value_mid"].iloc[:700]
+        cut = fair_value(df.iloc[:700])["fair_value_mid"]
+        pd.testing.assert_series_equal(full, cut)
+
+    def test_verdict_majority(self):
+        from pipeline.valuation import verdict_row
+        row = pd.Series({"market_cap_usd": 10.0, "fair_value_low": 1.0, "fair_value_high": 5.0})
+        self.assertEqual(verdict_row(row, 30.0, 50.0)["verdict"], "Overvalued")
+        self.assertEqual(verdict_row(row, -30.0, 10.0)["verdict"], "Undervalued")
+        self.assertEqual(verdict_row(row, -30.0, 50.0)["verdict"], "Mixed")  # over, under, fair
+        row2 = pd.Series({"market_cap_usd": 3.0, "fair_value_low": 1.0, "fair_value_high": 5.0})
+        self.assertEqual(verdict_row(row2, 0.0, 10.0)["verdict"], "Fairly valued")
+
+
 class OfflineBuild(unittest.TestCase):
     """Rebuild from the committed snapshot and check the published payload."""
 
@@ -72,7 +111,12 @@ class OfflineBuild(unittest.TestCase):
                     self.assertTrue(0 <= v <= 100, (c, k, v))
 
     def test_report_written(self):
-        self.assertIn("Confidence Premium", (ROOT / "reports" / "latest.md").read_text())
+        txt = (ROOT / "reports" / "latest.md").read_text()
+        self.assertIn("## Verdict:", txt)
+        self.assertIn("Confidence Premium", txt)
+
+    def test_near_verdict_is_valid(self):
+        self.assertIn(self.out["near"]["verdict"], {"Overvalued", "Undervalued", "Fairly valued", "Mixed"})
 
 
 if __name__ == "__main__":
