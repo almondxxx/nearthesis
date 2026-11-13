@@ -1,0 +1,63 @@
+name: Refresh data and deploy dashboard
+
+# Daily: fetch fresh public data, rebuild the index, commit the new snapshot,
+# and redeploy the dashboard to GitHub Pages. Also runs on demand and on push.
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+  push:
+    paths: ["pipeline/**", "docs/**", "run.py", "requirements.txt", ".github/workflows/refresh.yml"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Fetch and build (falls back to the committed snapshot if a source is down)
+        run: python run.py || python run.py --offline
+
+      - name: Tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Commit refreshed data
+        run: |
+          git config user.name "nearthesis-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data docs/data reports
+          if git diff --cached --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "data: daily refresh $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: refresh
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
