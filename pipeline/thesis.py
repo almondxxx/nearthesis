@@ -32,7 +32,8 @@ EXPLORER_Q = ("GET https://explorer.near-intents.org/api/v0/transactions"
 LABELS = {"active_accounts": "Active accounts", "transactions": "Transactions", "contract_calls": "Contract calls",
           "adoption": "Adoption Index", "intents_usd": "NEAR Intents volume (USD)",
           "intents_swaps": "NEAR Intents swaps (sampled)", "near_price": "NEAR price",
-          "fees_native": "Fees burned (NEAR)", "fees_usd": "Fees (USD)"}
+          "fees_native": "Fees burned (NEAR)", "fees_usd": "Fees (USD)", "returning_signers": "Returning signers (BigQuery)",
+          "real_usage": "Real Usage Index"}
 
 
 def _sql(name: str) -> str:
@@ -116,8 +117,19 @@ def build() -> dict:
             se = (g.std() / np.sqrt(g.count()) * 168).reindex(w.index)
             meta["weekly_swaps_rel_se_median"] = round(float((se / sw).median()), 3)
         meta["sampled_hours"] = int(len(s))
-    res = H.run(w, comps, measures)
+    rs = bq.load("bq_returning_signers")
+    real = ["fees_native"]
+    if rs is not None:
+        w["returning_signers"] = rs["returning_signers"].reindex(w.index)
+        if w["returning_signers"].notna().mean() > 0.9:      # covers the whole window
+            real = ["returning_signers", "fees_native"]
+    meta["real_usage_components"] = real
+    ms = H.mature_start(df["intents_usd"].dropna())
+    res = H.run(w, comps, measures, real=real, mature_from=ms)
+    if "returning_signers" in w and "returning_signers" not in real:   # partial coverage: test over BigQuery's window
+        res["q12_robustness"]["returning_signers~intents_usd"] = H.q1_q2(H.growth(w), "returning_signers", "intents_usd")
     w["adoption"] = res.pop("adoption_weekly")
+    w["real_usage"] = res.pop("real_usage_weekly")
     w.to_csv(PROCESSED / "thesis_weekly.csv", float_format="%.6g")
 
     # ------------------------------------------------------------- charts
@@ -134,12 +146,26 @@ def build() -> dict:
         NEARBLOCKS_Q.format(f="active_accounts, txns") + "\n(BigQuery: " + (
             f"data ends {meta.get('bq_last_day')}, so it is not used for the current window)" if meta["bq_available"]
             else "not queried - no credentials at build time)")
+    ru = w["real_usage"].dropna()
+    ser = {"Real Usage Index": _r(w["real_usage"], 1)}
+    for c in real:
+        ser[LABELS[c]] = _r(w[c] / w[c].dropna().iloc[0] * 100, 1)
+    if "returning_signers" in w and "returning_signers" not in real:
+        ser[LABELS["returning_signers"] + " - not in index (partial coverage)"] = _r(w["returning_signers"] / w["returning_signers"].dropna().iloc[0] * 100, 1)
+    add("real_usage", "Y", "Real Usage Index - primary target (weekly, first week = 100)", wk, ser,
+        NEARBLOCKS_Q.format(f="txn_fee (fees in NEAR)") + "\n\n" + _sql("03_weekly_returning_signers.sql"),
+        f"The Real Usage Index ({' and '.join(LABELS[c][0].lower() + LABELS[c][1:] for c in real)}) went from 100 in the week of "
+        f"{ru.index[0].date()} to {ru.iloc[-1]:,.1f} in the week of {ru.index[-1].date()}.", kind="log",
+        note="Primary target: repeat users and fees actually paid are hard for bots to fake. "
+             + ("" if "returning_signers" in real else
+                "Returning signers (BigQuery) join the index once BigQuery covers the whole window; until then the index is fees burned in NEAR. ")
+             + "'Active minus new accounts' is not used: NearBlocks new accounts can exceed active signers.")
     a = w["adoption"].dropna()
     comp_idx = {LABELS[c]: _r(w[c] / w[c].dropna().iloc[0] * 100, 1) for c in comps}
-    add("adoption", "Y", "Network Adoption Index (weekly, first week = 100)", wk,
+    add("adoption", "Y", "Broad Adoption Index - secondary target (weekly, first week = 100)", wk,
         {"Adoption Index": _r(w["adoption"], 1), **comp_idx},
         usage_q + ("\n\n" + _sql("02_contract_usage.sql") if "contract_calls" in comps else ""),
-        f"The Adoption Index ({', '.join(LABELS[c].lower() for c in comps)}) went from 100 in the week of "
+        f"The broad Adoption Index ({', '.join(LABELS[c][0].lower() + LABELS[c][1:] for c in comps)}) went from 100 in the week of "
         f"{a.index[0].date()} to {a.iloc[-1]:,.1f} in the week of {a.index[-1].date()}.",
         kind="log",
         note=None if "contract_calls" in comps else
@@ -193,8 +219,10 @@ def build() -> dict:
     out = {
         "meta": {**meta, "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                  "as_of": df.index.max().strftime("%Y-%m-%d"), "start": df.index[0].strftime("%Y-%m-%d"),
-                 "weeks": int(w["adoption"].notna().sum()), "labels": LABELS, "lags": H.LAGS,
-                 "max_lead": H.MAX_LEAD, "alpha": H.ALPHA, "break_days": H.BREAK_DAYS},
+                 "weeks": int(w["real_usage"].notna().sum()), "labels": LABELS, "lags": H.LAGS,
+                 "max_lead": H.MAX_LEAD, "alpha": H.ALPHA, "break_days": H.BREAK_DAYS,
+                 "mature_from": None if ms is None else ms.strftime("%Y-%m-%d"),
+                 "mature_threshold_usd": H.MATURE_THRESHOLD_USD},
         "charts": charts, "results": res,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)

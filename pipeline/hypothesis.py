@@ -7,6 +7,16 @@
   V   Economic value to NEAR      fees burned (in NEAR, and in USD)        - Q3 only
   C   BTC price                   market-wide control in every regression
 
+Primary target (fix 2): Real Usage Index = geometric mean of returning signers
+(signed this week and in one of the 4 previous weeks; BigQuery) and fees burned
+in NEAR - measures bots cannot cheaply fake. Returning signers join the index only
+when BigQuery covers the whole window; until then the index is fees burned alone.
+("Active minus new accounts" is NOT used: NearBlocks new accounts can exceed
+active signers, so that difference hits zero in some weeks.) The broad
+Adoption Index is reported as a secondary target.
+Robustness (fix 3): every test is repeated from the first day the 30-day average
+Intents volume exceeds $1M/day (before that its growth rates are launch noise).
+
 Q1  Does Intents volume predict future adoption?
 Q2  Is Intents volume a better predictor than NEAR's price?
 Q3  Does Intents activity translate into economically valuable activity for NEAR?
@@ -201,20 +211,55 @@ def q3(w: pd.DataFrame, intents: str = "intents_usd", value: str = "fees_native"
     return out
 
 
-def run(w: pd.DataFrame, comps: list[str], intents_measures: list[str]) -> dict:
+REAL_USAGE = ["returning_signers", "fees_native"]    # hard to fake: repeat users (BigQuery), fees actually paid
+MATURE_THRESHOLD_USD = 1e6                          # mature window: 30-day avg Intents volume > $1M/day
+
+
+def mature_start(daily_intents_usd: pd.Series) -> pd.Timestamp | None:
+    m = daily_intents_usd.rolling(30, min_periods=30).mean()
+    hit = m[m > MATURE_THRESHOLD_USD]
+    return None if hit.empty else hit.index.min()
+
+
+def _block(w: pd.DataFrame, comps: list[str], real: list[str], measures: list[str]) -> dict:
     w = w.copy()
     w["adoption"] = adoption_index(w, comps)
+    w["real_usage"] = adoption_index(w, [c for c in real if c in w])
     g = growth(w)
-    main_i = intents_measures[0]
-    res = {"components": comps, "q12": q1_q2(g, "adoption", main_i)}
-    res["q12_robustness"] = {}
-    for i in intents_measures[1:]:
+    main_i = measures[0]
+    res = {"q12": q1_q2(g, "real_usage", main_i),            # primary target (fix 2)
+           "q12_adoption": q1_q2(g, "adoption", main_i),     # broad index, secondary
+           "q12_robustness": {}}
+    for i in measures[1:]:
         if i in g and g[i].notna().sum() >= 30:
+            res["q12_robustness"][f"real_usage~{i}"] = q1_q2(g, "real_usage", i)
             res["q12_robustness"][f"adoption~{i}"] = q1_q2(g, "adoption", i)
-    for c in comps:
-        res["q12_robustness"][f"{c}~{main_i}"] = q1_q2(g, c, main_i)
+    for c in list(dict.fromkeys(real + comps)):
+        if c in g and g[c].notna().sum() >= 30:
+            res["q12_robustness"][f"{c}~{main_i}"] = q1_q2(g, c, main_i)
     res["q3"] = q3(w, main_i)
     res["q3_usd"] = q3(w, main_i, value="fees_usd")
-    res["answers"] = {"Q1": res["q12"]["q1"], "Q2": res["q12"]["q2"], "Q3": res["q3"]["verdict"]}
-    res["adoption_weekly"] = w["adoption"]
+    res["answers"] = {"Q1": res["q12"]["q1"], "Q2": res["q12"]["q2"], "Q3": res["q3"]["verdict"],
+                      "Q1_adoption": res["q12_adoption"]["q1"], "Q2_adoption": res["q12_adoption"]["q2"]}
+    res["weeks"] = int(w["real_usage"].notna().sum())
+    res["first_week"] = w.index[0].strftime("%Y-%m-%d")
+    res["_w"] = w
     return res
+
+
+def run(w: pd.DataFrame, comps: list[str], intents_measures: list[str],
+        real: list[str] | None = None, mature_from: pd.Timestamp | None = None) -> dict:
+    real = real or [c for c in REAL_USAGE if c in w]
+    full = _block(w, comps, real, intents_measures)
+    out = {k: v for k, v in full.items() if k != "_w"}
+    out["components"] = comps
+    out["real_usage_components"] = real
+    out["adoption_weekly"] = full["_w"]["adoption"]
+    out["real_usage_weekly"] = full["_w"]["real_usage"]
+    if mature_from is not None:                                  # fix 3: robustness window
+        wm = w[w.index >= mature_from]
+        if len(wm) >= 40:
+            mb = _block(wm, comps, real, intents_measures)
+            out["mature"] = {k: v for k, v in mb.items() if k != "_w"}
+            out["mature"]["from"] = pd.Timestamp(mature_from).strftime("%Y-%m-%d")
+    return out

@@ -27,6 +27,7 @@ MAX_GB = float(os.environ.get("BQ_MAX_GB", "150"))
 QUERIES = {  # cache file -> sql file
     "bq_daily_activity": "01_daily_activity.sql",
     "bq_contract_usage": "02_contract_usage.sql",
+    "bq_returning_signers": "03_weekly_returning_signers.sql",   # weekly rows, block_date = Sunday
 }
 
 

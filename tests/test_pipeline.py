@@ -133,6 +133,7 @@ class HypothesisTest(unittest.TestCase):
         if lead:
             ya[1:] += 0.8 * x[:-1]                 # adoption follows Intents one week later
             yt[1:] += 0.8 * x[:-1]
+            f[1:] += 0.8 * x[:-1]                  # and so do fees (the Real Usage Index)
         lvl = lambda g: 100 * np.exp(np.cumsum(g))
         return pd.DataFrame({"active_accounts": lvl(ya), "transactions": lvl(yt), "intents_usd": lvl(x) * 1e6,
                              "near_price": lvl(p), "btc_price": lvl(b), "fees_native": lvl(f),
@@ -143,6 +144,7 @@ class HypothesisTest(unittest.TestCase):
         out = H.run(self._weekly(lead=True), ["active_accounts", "transactions"], ["intents_usd"])
         self.assertEqual(out["answers"]["Q1"], "YES")
         self.assertEqual(out["answers"]["Q2"], "YES")
+        self.assertEqual(out["answers"]["Q1_adoption"], "YES")
         self.assertGreater(out["q12"]["lead_lag"]["intents_usd"][1]["r"], 0.4)
 
     def test_does_not_invent_a_lead(self):
@@ -150,6 +152,7 @@ class HypothesisTest(unittest.TestCase):
         out = H.run(self._weekly(lead=False), ["active_accounts", "transactions"], ["intents_usd"])
         self.assertNotEqual(out["answers"]["Q1"], "YES")
         self.assertNotEqual(out["answers"]["Q2"], "YES")
+        self.assertNotEqual(out["answers"]["Q1_adoption"], "YES")
 
     def test_q3_detects_same_week_fee_link(self):
         from pipeline import hypothesis as H

@@ -72,7 +72,7 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
 <main>
 <header>
   <h1>Does NEAR Intents volume predict NEAR network adoption?</h1>
-  <p>Three variables: <b>NEAR Intents volume</b> (the candidate leading indicator), <b>NEAR token price</b> (the competing indicator), and a <b>Network Adoption Index</b> (active accounts, transactions and contract usage combined into one series). Fees burned on NEAR are added for Q3. The page reports what the data says, including anything that cuts against the hypothesis.</p>
+  <p>Predictors: <b>NEAR Intents volume</b> (the candidate leading indicator) and <b>NEAR token price</b> (the competing indicator). Primary target: a <b>Real Usage Index</b> built from measures bots can't cheaply fake (fees burned in NEAR, plus returning signers once BigQuery covers the window). Secondary target: a broad <b>Adoption Index</b> of active accounts, transactions and contract usage. The page reports what the data says, including anything that cuts against the hypothesis.</p>
   <div class="meta">
     <span id="asof">Loading data…</span>
     <span>Rebuilt daily from raw data with <code>python run.py</code></span>
@@ -87,14 +87,14 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
 <h2>The variables</h2>
 <div id="charts"></div>
 
-<h2>Q1 and Q2: does this week's change predict adoption <i>k</i> weeks later?</h2>
+<h2>Q1 and Q2: does this week's change predict real usage <i>k</i> weeks later?</h2>
 <div class="card">
   <p class="c-sent" id="ll-sent"></p>
   <div id="c-ll" class="chart"></div>
-  <p class="c-note">Correlation between each predictor's weekly growth and Adoption Index growth <i>k</i> weeks later. Filled markers mean p &lt; 0.05. A leading indicator needs significant points at k ≥ 1.</p>
+  <p class="c-note">Correlation between each predictor's weekly growth and Real Usage Index growth <i>k</i> weeks later. Filled markers mean p &lt; 0.05. A leading indicator needs significant points at k ≥ 1.</p>
 </div>
 <div class="card tablewrap">
-  <p class="c-title">Predictive tests (controls: 2 weeks of adoption's own history, 2 weeks of BTC, a dummy for the 2 April 2026 break)</p>
+  <p class="c-title">Predictive tests (controls: 2 weeks of the target's own history, 2 weeks of BTC, a dummy for the April 2026 break)</p>
   <p class="c-sent">"p" tests whether two weekly lags of the predictor add information. "Out-of-sample" is next-week forecast error with the predictor divided by error without it, using only earlier weeks. Below 1 means the predictor helps.</p>
   <table id="ptable"></table>
   <p class="c-title" style="margin-top:16px">Robustness: the same tests on each component and on other Intents measures</p>
@@ -125,15 +125,19 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
     yaxis: { gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false },
   }, extra || {});
 
-  const SEC = { Y: "Network Adoption Index (Y)", X1: "NEAR Intents volume (X1, the candidate leading indicator)", X2: "NEAR price (X2, the competing indicator)", V: "Economic value to NEAR (for Q3)" };
+  const SEC = { Y: "Usage targets (Y): Real Usage Index (primary), broad Adoption Index (secondary)", X1: "NEAR Intents volume (X1, the candidate leading indicator)", X2: "NEAR price (X2, the competing indicator)", V: "Economic value to NEAR (for Q3)" };
   const cls = (a) => a.split(" ")[0];
   const pf = (v) => v == null ? "n/a" : v < 0.001 ? "<0.001" : v.toFixed(3);
   const pp = (v) => v == null ? "p n/a" : v < 0.001 ? "p < 0.001" : "p = " + v.toFixed(3);
 
   function answers() {
     const R = D.results, A = R.answers, q = R.q12, q3 = R.q3;
+    const MA = R.mature ? R.mature.answers : null;
+    const extra = (q) => `<div class="s" style="margin-top:8px;font-size:12.5px;color:var(--text-3)">` +
+      (q !== "Q3" ? `Broad Adoption Index: <b>${esc(A[q + "_adoption"])}</b>. ` : "") +
+      (MA ? `From ${R.mature.from} (mature window): <b>${esc(MA[q])}</b>.` : "") + `</div>`;
     const card = (n, title, a, why) => `<div class="card ans"><div class="k">${n}</div><div class="s" style="margin-top:2px">${title}</div>
-      <div class="v ${cls(a)}">${esc(a)}</div><div class="s">${why}</div></div>`;
+      <div class="v ${cls(a)}">${esc(a)}</div><div class="s">${why}</div>${extra(n)}</div>`;
     $("#answers").innerHTML =
       card("Q1", "Does Intents volume predict future network adoption?", A.Q1,
         `Adding Intents' last 2 weeks: ${pp(q.intents_alone.p)}, out-of-sample error ratio ${q.intents_alone.oos_ratio}.`) +
@@ -180,9 +184,13 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
   function tables() {
     const q = D.results.q12, L = D.meta.labels;
     const row = (n, r) => `<tr><td>${n}</td><td>${pf(r.p)}</td><td>${r.oos_ratio ?? "n/a"}</td><td>${r.n ?? ""}</td></tr>`;
-    $("#ptable").innerHTML = "<thead><tr><th>Model (target: Adoption Index)</th><th>p</th><th>Out-of-sample error ratio</th><th>Weeks</th></tr></thead><tbody>" +
-      row("Q1: Intents volume alone", q.intents_alone) + row("NEAR price alone", q.price_alone) +
-      row("Q2: Intents, given price is already in the model", q.intents_beyond_price) + row("Q2: Price, given Intents is already in the model", q.price_beyond_intents) + "</tbody>";
+    const qa = D.results.q12_adoption, mq = D.results.mature ? D.results.mature.q12 : null;
+    const block = (title, z) => `<tr><td colspan="4" style="font-weight:600;padding-top:14px">${title}</td></tr>` +
+      row("Q1: Intents volume alone", z.intents_alone) + row("NEAR price alone", z.price_alone) +
+      row("Q2: Intents, given price is already in the model", z.intents_beyond_price) + row("Q2: Price, given Intents is already in the model", z.price_beyond_intents);
+    $("#ptable").innerHTML = "<thead><tr><th>Model</th><th>p</th><th>Out-of-sample error ratio</th><th>Weeks</th></tr></thead><tbody>" +
+      block("Target: Real Usage Index (primary)", q) + block("Target: broad Adoption Index (secondary)", qa) +
+      (mq ? block(`Target: Real Usage Index, mature window from ${D.results.mature.from}`, mq) : "") + "</tbody>";
     const R = D.results.q12_robustness;
     $("#rtable").innerHTML = "<thead><tr><th>Target ~ Intents measure</th><th>Q1</th><th>Q2</th><th>Intents p</th><th>Intents ratio</th><th>Price p</th><th>Price ratio</th></tr></thead><tbody>" +
       Object.entries(R).map(([k, v]) => { const [t, x] = k.split("~"); return `<tr><td>${esc((L[t] || t) + " ~ " + (L[x] || x))}</td><td>${v.q1}</td><td>${esc(v.q2)}</td><td>${pf(v.intents_alone.p)}</td><td>${v.intents_alone.oos_ratio}</td><td>${pf(v.price_alone.p)}</td><td>${v.price_alone.oos_ratio}</td></tr>`; }).join("") + "</tbody>";
@@ -198,7 +206,9 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
   function method() {
     const m = D.meta, fr = m.bq_freshness;
     $("#method").innerHTML = `
-      <p><b>Adoption Index.</b> The geometric mean of ${m.adoption_components.map((c) => (m.labels[c] || c).toLowerCase()).join(", ")}, each indexed to 100 in the first week. Source: ${m.usage_source}. ${m.adoption_components.includes("contract_calls") ? "" : "Contract usage joins once BigQuery data covers the whole window. NearBlocks' contract field is excluded because it is dominated by one automated sender."}</p>
+      <p><b>Broad Adoption Index (secondary).</b> The geometric mean of ${m.adoption_components.map((c) => (m.labels[c] || c).toLowerCase()).join(", ")}, each indexed to 100 in the first week. Source: ${m.usage_source}. ${m.adoption_components.includes("contract_calls") ? "" : "Contract usage joins once BigQuery data covers the whole window. NearBlocks' contract field is excluded because it is dominated by one automated sender."}</p>
+      <p><b>Real Usage Index (primary target).</b> ${m.real_usage_components.map((c) => (m.labels[c] || c).toLowerCase()).join(" and ")}. Returning signers (accounts that signed this week and in one of the 4 previous weeks, <code>sql/03_weekly_returning_signers.sql</code>) join once BigQuery covers the whole window. "Active minus new accounts" isn't used, because NearBlocks' new accounts can exceed active signers.</p>
+      <p><b>Mature window.</b> Every test is repeated from ${m.mature_from}, the first day the 30-day average Intents volume passed ${"$"}${(m.mature_threshold_usd / 1e6).toFixed(0)}M a day. Before that, its weekly growth rates are launch noise.</p>
       <p><b>Weekly growth, not levels.</b> Complete Monday–Sunday weeks, as the week-on-week change in log level. Two series that both trend over two years would otherwise look related even if they aren't.</p>
       <p><b>One break, handled once.</b> On ${m.break_days.join(", ")}, NEAR transactions fell 72% and fees 62% in a day while active accounts barely moved. That is consistent with one large automated sender stopping. That week and the following one get a dummy in every regression, because a mid-week drop splits across two weekly averages. No other data points are adjusted.</p>
       <p><b>Verdict rules, fixed before looking at results</b> (coded in <code>pipeline/hypothesis.py</code>). Q1 is YES when Intents passes the F-test and improves out-of-sample forecasts. Q2 is YES when Intents adds information beyond price, price adds none beyond Intents, and Intents forecasts better. Q3 is YES when fees rise with Intents volume (p &lt; 0.05) and fees per dollar of volume didn't fall by more than half.</p>

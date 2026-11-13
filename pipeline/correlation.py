@@ -37,7 +37,7 @@ METRICS = {  # column -> (label, weekly aggregation, source note)
     "active_accounts": ("Active accounts", "mean", "daily distinct signers"),
     "transactions": ("Transactions", "mean", "daily transactions"),
     "new_accounts": ("New accounts", "mean", "accounts created per day (NearBlocks)"),
-    "returning_accounts": ("Returning accounts", "mean", "active minus new (NearBlocks)"),
+    "returning_signers": ("Returning signers", "mean", "signed this week and in one of the 4 previous weeks (BigQuery)"),
     "fees_native": ("Fees burned (NEAR)", "sum", "transaction fees in NEAR (NearBlocks)"),
     "contract_calls": ("Contract calls", "mean", "function-call receipts (BigQuery)"),
 }
@@ -50,10 +50,13 @@ def _weekly() -> tuple[pd.DataFrame, dict]:
     df, meta = assemble()
     nb = pd.read_csv(RAW / "near_nearblocks.csv", parse_dates=["date"], index_col="date")
     df["new_accounts"] = nb["new_accounts"]
-    df["returning_accounts"] = (nb["active_accounts"] - nb["new_accounts"]).clip(lower=0)
     how = {c: a for c, (_, a, _) in METRICS.items()}
     how.update({"intents_usd": "sum", "btc_price": "mean", "near_price": "mean"})
-    w = H.weekly(df, how)
+    w = H.weekly(df, {k: v for k, v in how.items() if k != "returning_signers"})
+    from pipeline import bq
+    rs = bq.load("bq_returning_signers")
+    if rs is not None:
+        w["returning_signers"] = rs["returning_signers"].reindex(w.index)
     if (RAW / "intents_hour_samples.csv").exists():
         s = pd.read_csv(RAW / "intents_hour_samples.csv", parse_dates=["date"]).drop_duplicates(["date", "hour"])
         g = s.set_index("date")["swaps_success"].resample("W-SUN")
