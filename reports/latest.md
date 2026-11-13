@@ -1,6 +1,6 @@
 # NEAR valuation check - latest numbers
 
-_Generated automatically by `python run.py`. Data as of **2026-11-12** (fetched 2026-11-13T17:18:09Z). Do not edit by hand: the next pipeline run overwrites this file._
+_Generated automatically by `python run.py`. Data as of **2026-11-12** (fetched 2026-11-13T17:37:10Z). Do not edit by hand: the next pipeline run overwrites this file._
 
 ## Verdict: **Overvalued**
 
