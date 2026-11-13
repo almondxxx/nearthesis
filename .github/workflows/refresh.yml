@@ -33,7 +33,9 @@ jobs:
         env:
           NEAR_INTENTS_JWT: ${{ secrets.NEAR_INTENTS_JWT }}
           GCP_SA_KEY_JSON: ${{ secrets.GCP_SA_KEY_JSON }}
-        run: python run.py --intents-minutes 30 || python run.py --offline
+          # sample the Explorer API only on the daily schedule / manual runs, never on code pushes
+          INTENTS_MINUTES: ${{ github.event_name == 'push' && '0' || '30' }}
+        run: python run.py --intents-minutes "$INTENTS_MINUTES" || python run.py --offline
 
       - name: Tests
         run: python -m unittest discover -s tests -v
