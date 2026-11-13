@@ -1,30 +1,38 @@
-"""Test: "Cross-chain volume through NEAR Intents is a better leading indicator
-of real network usage than token price."
+"""Three questions, three variables (+ one for Q3), all weekly.
 
-Everything is weekly (Mon-Sun, complete weeks only) and in log growth
-(week-on-week change of log level), so shared long-run trends cannot create
-a fake relationship.
+  X1  NEAR Intents volume         candidate leading indicator
+  X2  NEAR token price            competing indicator
+  Y   Network Adoption Index      geometric mean of active accounts, transactions
+                                  and contract usage, each indexed to 100
+  V   Economic value to NEAR      fees burned (in NEAR, and in USD)        - Q3 only
+  C   BTC price                   market-wide control in every regression
 
-Predictors   intents_usd     NEAR Intents USD volume (DefiLlama, complete)
-             intents_swaps   successful 1Click swaps (Explorer API, sampled hours)
-             near_price      NEAR price (NearBlocks)
-Control      btc_price       BTC price: market-wide moves
-Targets      network-usage series from BigQuery (or NearBlocks where BigQuery
-             is unavailable/stale - the source is always labelled)
+Q1  Does Intents volume predict future adoption?
+Q2  Is Intents volume a better predictor than NEAR's price?
+Q3  Does Intents activity translate into economically valuable activity for NEAR?
 
-Tests, decided before looking at results:
- 1. Lead-lag correlation, lags 0-8 weeks: corr(x_t, y_{t+k}).
- 2. In-sample predictive test: y_t on 2 own lags + 2 BTC lags, adding 2 lags
-    of the predictor; F-test that the predictor lags are all zero.
- 3. Out-of-sample: expanding window from the middle of the sample, one-week-
-    ahead forecasts; RMSE relative to the baseline (own lags + BTC). < 1 = helps.
+Method (fixed before looking at results)
+* Complete Mon-Sun weeks; every series in weekly log growth, so shared
+  long-run trends cannot create a fake relationship.
+* One documented break gets an impulse dummy: the week containing 2026-04-02,
+  when NEAR transactions fell 72% and fees 62% in a day while active accounts
+  barely moved (a large automated sender stopping). No other outliers are touched.
+* Predictive model: y_t on 2 own lags + 2 BTC lags (+ dummy), then add 2 lags of
+  the predictor. F-test (alpha 0.05) that the predictor lags are zero.
+  Out-of-sample: expanding window from mid-sample, one-week-ahead RMSE with the
+  predictor / without it (< 1 = it helps).
 
-Verdict rule (per target): Intents "beats" price when the best Intents measure
-has p < 0.05 in test 2 AND an out-of-sample RMSE ratio below 1 AND below
-price's ratio. The hypothesis is SUPPORTED if Intents beats price on most
-targets, REJECTED if price does at least as well on most targets (or Intents
-never passes test 2 while price sometimes does), NOT SUPPORTED if neither
-passes, MIXED otherwise.
+Verdict rules
+Q1  YES if Intents passes the F-test AND its out-of-sample ratio < 1;
+    PARTLY if only one of the two holds; NO otherwise.
+Q2  YES if Intents adds information beyond price (Intents lags significant in a
+    model that already has price lags) AND price does not add information beyond
+    Intents AND Intents' out-of-sample ratio < price's; NO if price wins those;
+    TIE if neither predictor helps; MIXED otherwise.
+Q3  YES if fees (in NEAR) rise with Intents volume in the same week (elasticity
+    > 0, p < 0.05, BTC-controlled) AND fees per $ of Intents volume did not fall
+    by more than half from the first to the last quarter; PARTLY if only the
+    elasticity holds; NO if the elasticity is not significant.
 """
 from __future__ import annotations
 
@@ -36,31 +44,43 @@ import statsmodels.api as sm
 LAGS = 2
 MAX_LEAD = 8
 ALPHA = 0.05
-PREDICTORS = {
-    "intents_usd": "NEAR Intents volume (USD)",
-    "intents_swaps": "NEAR Intents swap count (sampled)",
-    "near_price": "NEAR price",
-}
 CONTROL = "btc_price"
+BREAK_DAYS = ["2026-04-02"]
 
 
 def weekly(daily: pd.DataFrame, how: dict[str, str]) -> pd.DataFrame:
-    d = daily.copy()
     out = {}
     for c, agg in how.items():
-        if c not in d:
+        if c not in daily:
             continue
-        r = d[c].resample("W-SUN")
+        r = daily[c].resample("W-SUN")
         s = r.sum(min_count=6) if agg == "sum" else r.mean()
-        n = r.count()
-        out[c] = s.where(n >= 6)  # need at least 6 of 7 days
+        out[c] = s.where(r.count() >= 6)
     w = pd.DataFrame(out)
     today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
-    return w[w.index < today]  # drop the current, incomplete week
+    return w[w.index < today - pd.Timedelta(days=0)]
 
 
 def growth(w: pd.DataFrame) -> pd.DataFrame:
     return np.log(w.where(w > 0)).diff()
+
+
+def adoption_index(w: pd.DataFrame, comps: list[str]) -> pd.Series:
+    """Geometric mean of the components, each indexed to 100 at its first value."""
+    idx = [w[c] / w[c].dropna().iloc[0] * 100 for c in comps if c in w and w[c].notna().any()]
+    if not idx:
+        return pd.Series(dtype=float)
+    m = pd.concat(idx, axis=1)
+    return np.exp(np.log(m).mean(axis=1)).where(m.notna().all(axis=1))
+
+
+def break_dummy(index: pd.DatetimeIndex) -> pd.Series:
+    d = pd.Series(0.0, index=index)
+    for day in BREAK_DAYS:
+        wk = pd.Timestamp(day).to_period("W-SUN").end_time.normalize()
+        if wk in d.index:
+            d.loc[wk] = 1.0
+    return d
 
 
 def lead_lag(x: pd.Series, y: pd.Series) -> list[dict]:
@@ -75,92 +95,121 @@ def lead_lag(x: pd.Series, y: pd.Series) -> list[dict]:
     return rows
 
 
-def _design(df: pd.DataFrame, y: str, xs: list[str]) -> pd.DataFrame:
-    cols = {"y": df[y]}
+def _design(g: pd.DataFrame, y: str, xs: list[str]) -> pd.DataFrame:
+    cols = {"y": g[y]}
     for v in [y] + xs:
         for l in range(1, LAGS + 1):
-            cols[f"{v}_l{l}"] = df[v].shift(l)
-    return pd.DataFrame(cols).dropna()
+            cols[f"{v}_l{l}"] = g[v].shift(l)
+    cols["break"] = break_dummy(g.index)
+    d = pd.DataFrame(cols).dropna()
+    if d["break"].sum() == 0:
+        d = d.drop(columns="break")
+    return d
 
 
-def predictive(df: pd.DataFrame, y: str, x: str) -> dict:
-    base_x = [CONTROL] if CONTROL in df else []
-    d = _design(df, y, base_x + [x])
+def _lags(v):
+    return [f"{v}_l{l}" for l in range(1, LAGS + 1)]
+
+
+def predictive(g: pd.DataFrame, y: str, x: str, also: list[str] | None = None) -> dict:
+    """F-test and out-of-sample gain of adding x's lags to: own lags + BTC lags (+ `also` lags)."""
+    base = [CONTROL] + (also or [])
+    d = _design(g, y, base + [x])
     if len(d) < 30:
         return {"n": len(d), "p": None, "oos_ratio": None}
     X = sm.add_constant(d.drop(columns="y"))
     fit = sm.OLS(d["y"], X).fit()
-    hyp = " = 0, ".join(f"{x}_l{l}" for l in range(1, LAGS + 1)) + " = 0"
-    p = float(fit.f_test(hyp).pvalue)
-
-    # out-of-sample, expanding window from the middle of the sample
-    base_cols = [c for c in X.columns if not c.startswith(f"{x}_l")]
+    p = float(fit.f_test(" = 0, ".join(_lags(x)) + " = 0").pvalue)
+    base_cols = [c for c in X.columns if c not in _lags(x)]
     start = len(d) // 2
-    e_full, e_base = [], []
+    e1, e0 = [], []
     for t in range(start, len(d)):
-        tr, te = slice(0, t), slice(t, t + 1)
-        f1 = sm.OLS(d["y"].iloc[tr], X.iloc[tr]).fit()
-        f0 = sm.OLS(d["y"].iloc[tr], X[base_cols].iloc[tr]).fit()
-        e_full.append(float(d["y"].iloc[te].values[0] - f1.predict(X.iloc[te]).values[0]))
-        e_base.append(float(d["y"].iloc[te].values[0] - f0.predict(X[base_cols].iloc[te]).values[0]))
+        # a column that is all zero in the training window (the break dummy before the break) is dropped
+        live = [c for c in X.columns if c == "const" or X[c].iloc[:t].abs().sum() > 0]
+        c1, c0 = live, [c for c in live if c in base_cols]
+        f1 = sm.OLS(d["y"].iloc[:t], X[c1].iloc[:t]).fit()
+        f0 = sm.OLS(d["y"].iloc[:t], X[c0].iloc[:t]).fit()
+        yt = d["y"].iloc[t]
+        e1.append(yt - float(f1.predict(X[c1].iloc[[t]]).iloc[0]))
+        e0.append(yt - float(f0.predict(X[c0].iloc[[t]]).iloc[0]))
     rmse = lambda e: float(np.sqrt(np.mean(np.square(e))))
-    return {"n": len(d), "n_oos": len(e_full), "p": round(p, 4),
-            "oos_ratio": round(rmse(e_full) / rmse(e_base), 3),
+    coef = float(sum(fit.params[c] for c in _lags(x)))
+    return {"n": len(d), "n_oos": len(e1), "p": round(p, 4), "oos_ratio": round(rmse(e1) / rmse(e0), 3),
+            "sum_of_lag_coefs": round(coef, 4),
             "first_week": d.index[0].strftime("%Y-%m-%d"), "last_week": d.index[-1].strftime("%Y-%m-%d")}
 
 
-def run(w: pd.DataFrame, targets: dict[str, str]) -> dict:
+def _ok(r):
+    return r.get("p") is not None and r["p"] < ALPHA
+
+
+def q1_q2(g: pd.DataFrame, y: str, intents: str, price: str = "near_price") -> dict:
+    r_i = predictive(g, y, intents)
+    r_p = predictive(g, y, price)
+    i_beyond_p = predictive(g, y, intents, also=[price])   # does Intents add info once price is known?
+    p_beyond_i = predictive(g, y, price, also=[intents])   # and vice versa
+    ll = {intents: lead_lag(g[intents], g[y]), price: lead_lag(g[price], g[y])}
+
+    i_sig, i_oos = _ok(r_i), (r_i.get("oos_ratio") or 9) < 1
+    q1 = "YES" if (i_sig and i_oos) else ("PARTLY" if (i_sig or i_oos) else "NO")
+
+    p_sig, p_oos = _ok(r_p), (r_p.get("oos_ratio") or 9) < 1
+    if _ok(i_beyond_p) and not _ok(p_beyond_i) and (r_i["oos_ratio"] or 9) < (r_p["oos_ratio"] or 9):
+        q2 = "YES"
+    elif _ok(p_beyond_i) and not _ok(i_beyond_p) and (r_p["oos_ratio"] or 9) <= (r_i["oos_ratio"] or 9):
+        q2 = "NO"
+    elif not (i_sig or i_oos or p_sig or p_oos):
+        q2 = "TIE (neither predicts)"
+    else:
+        q2 = "MIXED"
+    return {"target": y, "intents": intents, "q1": q1, "q2": q2, "lead_lag": ll,
+            "intents_alone": r_i, "price_alone": r_p,
+            "intents_beyond_price": i_beyond_p, "price_beyond_intents": p_beyond_i}
+
+
+def q3(w: pd.DataFrame, intents: str = "intents_usd", value: str = "fees_native",
+       value_usd: str = "fees_usd") -> dict:
     g = growth(w)
-    results, verdicts = {}, {}
-    for t, label in targets.items():
-        if t not in g or g[t].notna().sum() < 30:
-            continue
-        res = {}
-        for x in PREDICTORS:
-            if x not in g or g[x].notna().sum() < 30:
-                continue
-            res[x] = {"lead_lag": lead_lag(g[x], g[t]), **predictive(g, t, x)}
-        results[t] = res
-        verdicts[t] = _verdict(res)
-    tally = pd.Series([v["winner"] for v in verdicts.values()]).value_counts().to_dict()
-    n = len(verdicts)
-    intents_wins = tally.get("intents", 0)
-    price_wins = tally.get("price", 0)
-    any_intents_sig = any(v["intents_significant"] for v in verdicts.values())
-    if n and intents_wins > n / 2:
-        overall = "SUPPORTED"
-    elif n and price_wins >= n / 2:
-        overall = "REJECTED"            # price leads usage at least as well
-    elif n and not any_intents_sig and price_wins == 0:
-        overall = "NOT SUPPORTED"       # neither Intents nor price leads usage
-    elif n and not any_intents_sig:
-        overall = "REJECTED"
-    else:
-        overall = "MIXED"
-    return {"results": results, "verdicts": verdicts, "overall": overall,
-            "tally": tally, "n_targets": n}
+    d = pd.DataFrame({"v": g[value], "x": g[intents], "c": g[CONTROL], "brk": break_dummy(g.index)}).dropna()
+    out = {"value": value, "n": len(d)}
+    if len(d) < 30:
+        return {**out, "verdict": "NOT COMPUTED"}
+    X = sm.add_constant(d[["x", "c"] + (["brk"] if d["brk"].sum() else [])])
+    fit = sm.OLS(d["v"], X).fit(cov_type="HC1")
+    out["elasticity"] = round(float(fit.params["x"]), 4)
+    out["elasticity_p"] = round(float(fit.pvalues["x"]), 4)
+    out["elasticity_ci"] = [round(float(v), 4) for v in fit.conf_int().loc["x"]]
+    out["predictive"] = predictive(g, value, intents)
+    out["lead_lag"] = lead_lag(g[intents], g[value])
+
+    cap = (w[value_usd] / w[intents] * 1e6).replace([np.inf, -np.inf], np.nan).dropna()
+    q = cap.resample("QE").mean().dropna()
+    out["capture_first_q"] = round(float(q.iloc[0]), 2) if len(q) else None
+    out["capture_last_q"] = round(float(q.iloc[-1]), 2) if len(q) else None
+    out["capture_first_q_label"] = str(q.index[0].to_period("Q")) if len(q) else None
+    out["capture_last_q_label"] = str(q.index[-1].to_period("Q")) if len(q) else None
+    out["capture_change"] = round(float(q.iloc[-1] / q.iloc[0] - 1), 4) if len(q) > 1 else None
+
+    pos = out["elasticity"] > 0 and out["elasticity_p"] < ALPHA
+    held = out["capture_change"] is not None and out["capture_change"] > -0.5
+    out["verdict"] = "YES" if (pos and held) else ("PARTLY" if pos else "NO")
+    return out
 
 
-def _passes(r: dict | None) -> bool:
-    return bool(r and r.get("p") is not None and r["p"] < ALPHA and r.get("oos_ratio") is not None and r["oos_ratio"] < 1)
-
-
-def _verdict(res: dict) -> dict:
-    intents = [k for k in ("intents_usd", "intents_swaps") if k in res]
-    best_i = min(intents, key=lambda k: (res[k].get("oos_ratio") or 9e9)) if intents else None
-    ri, rp = (res.get(best_i) if best_i else None), res.get("near_price")
-    i_ok, p_ok = _passes(ri), _passes(rp)
-    ir = ri.get("oos_ratio") if ri else None
-    pr = rp.get("oos_ratio") if rp else None
-    if i_ok and (pr is None or ir < pr):
-        winner = "intents"
-    elif p_ok and (ir is None or pr <= ir):
-        winner = "price"
-    elif i_ok or p_ok:
-        winner = "intents" if i_ok else "price"
-    else:
-        winner = "neither"
-    return {"best_intents_measure": best_i, "winner": winner,
-            "intents_significant": bool(ri and ri.get("p") is not None and ri["p"] < ALPHA),
-            "intents_oos_ratio": ir, "price_oos_ratio": pr,
-            "intents_p": ri.get("p") if ri else None, "price_p": rp.get("p") if rp else None}
+def run(w: pd.DataFrame, comps: list[str], intents_measures: list[str]) -> dict:
+    w = w.copy()
+    w["adoption"] = adoption_index(w, comps)
+    g = growth(w)
+    main_i = intents_measures[0]
+    res = {"components": comps, "q12": q1_q2(g, "adoption", main_i)}
+    res["q12_robustness"] = {}
+    for i in intents_measures[1:]:
+        if i in g and g[i].notna().sum() >= 30:
+            res["q12_robustness"][f"adoption~{i}"] = q1_q2(g, "adoption", i)
+    for c in comps:
+        res["q12_robustness"][f"{c}~{main_i}"] = q1_q2(g, c, main_i)
+    res["q3"] = q3(w, main_i)
+    res["q3_usd"] = q3(w, main_i, value="fees_usd")
+    res["answers"] = {"Q1": res["q12"]["q1"], "Q2": res["q12"]["q2"], "Q3": res["q3"]["verdict"]}
+    res["adoption_weekly"] = w["adoption"]
+    return res

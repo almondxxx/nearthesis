@@ -120,7 +120,7 @@ class OfflineBuild(unittest.TestCase):
 
 
 class HypothesisTest(unittest.TestCase):
-    """The test must find a real lead when one exists, and not invent one."""
+    """The tests must find a real lead when one exists, and not invent one."""
 
     def _weekly(self, lead: bool, n=120, seed=3):
         rng = np.random.default_rng(seed)
@@ -128,33 +128,51 @@ class HypothesisTest(unittest.TestCase):
         x = rng.normal(0, 0.1, n)                  # Intents growth
         p = rng.normal(0, 0.1, n)                  # price growth
         b = rng.normal(0, 0.05, n)                 # BTC growth
-        y = rng.normal(0, 0.05, n)
+        ya, yt = rng.normal(0, 0.05, n), rng.normal(0, 0.05, n)
+        f = rng.normal(0, 0.05, n) + 0.5 * x       # fees move with Intents in the same week
         if lead:
-            y[1:] += 0.8 * x[:-1]                  # usage follows Intents one week later
+            ya[1:] += 0.8 * x[:-1]                 # adoption follows Intents one week later
+            yt[1:] += 0.8 * x[:-1]
         lvl = lambda g: 100 * np.exp(np.cumsum(g))
-        return pd.DataFrame({"usage": lvl(y), "intents_usd": lvl(x), "near_price": lvl(p), "btc_price": lvl(b)}, index=idx)
+        return pd.DataFrame({"active_accounts": lvl(ya), "transactions": lvl(yt), "intents_usd": lvl(x) * 1e6,
+                             "near_price": lvl(p), "btc_price": lvl(b), "fees_native": lvl(f),
+                             "fees_usd": lvl(f) * 1e3}, index=idx)
 
     def test_detects_a_real_lead(self):
         from pipeline import hypothesis as H
-        out = H.run(self._weekly(lead=True), {"usage": "usage"})
-        self.assertEqual(out["overall"], "SUPPORTED")
-        ll = out["results"]["usage"]["intents_usd"]["lead_lag"]
-        self.assertGreater(ll[1]["r"], 0.4)
+        out = H.run(self._weekly(lead=True), ["active_accounts", "transactions"], ["intents_usd"])
+        self.assertEqual(out["answers"]["Q1"], "YES")
+        self.assertEqual(out["answers"]["Q2"], "YES")
+        self.assertGreater(out["q12"]["lead_lag"]["intents_usd"][1]["r"], 0.4)
 
     def test_does_not_invent_a_lead(self):
         from pipeline import hypothesis as H
-        out = H.run(self._weekly(lead=False), {"usage": "usage"})
-        self.assertNotEqual(out["overall"], "SUPPORTED")
+        out = H.run(self._weekly(lead=False), ["active_accounts", "transactions"], ["intents_usd"])
+        self.assertNotEqual(out["answers"]["Q1"], "YES")
+        self.assertNotEqual(out["answers"]["Q2"], "YES")
+
+    def test_q3_detects_same_week_fee_link(self):
+        from pipeline import hypothesis as H
+        out = H.run(self._weekly(lead=False), ["active_accounts", "transactions"], ["intents_usd"])
+        self.assertGreater(out["q3"]["elasticity"], 0.3)
+        self.assertLess(out["q3"]["elasticity_p"], 0.05)
+
+    def test_adoption_index_is_geometric_mean(self):
+        from pipeline import hypothesis as H
+        w = pd.DataFrame({"a": [10.0, 20.0], "b": [5.0, 1.25]})
+        idx = H.adoption_index(w, ["a", "b"])
+        self.assertAlmostEqual(idx.iloc[0], 100.0)
+        self.assertAlmostEqual(idx.iloc[1], np.sqrt(200 * 25))
 
     def test_thesis_build_offline(self):
         from pipeline.thesis import build
         o = build()
-        self.assertIn(o["test"]["overall"], {"SUPPORTED", "REJECTED", "NOT SUPPORTED", "MIXED"})
+        for q in ("Q1", "Q2", "Q3"):
+            self.assertIn(o["results"]["answers"][q].split(" ")[0], {"YES", "NO", "PARTLY", "TIE", "MIXED", "NOT"})
         for c in o["charts"]:
             self.assertTrue(c["query"] and c["sentence"], c["id"])
             for v in c["series"].values():
-                self.assertEqual(len(v), len(o["dates"]))
-
+                self.assertEqual(len(v), len(c["x"]))
 
 if __name__ == "__main__":
     unittest.main()

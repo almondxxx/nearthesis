@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NEAR Intents Usage Test</title>
+<title>NEAR Intents Adoption Test</title>
 <meta name="description" content="Is cross-chain volume through NEAR Intents a better leading indicator of NEAR network usage than token price? An evidence-first test, rebuilt daily from raw data.">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.34.0/plotly.min.js"></script>
 <style>
@@ -40,11 +40,13 @@ header p { margin: 0 0 6px; color: var(--text-2); max-width: 780px; }
 a { color: var(--s1); }
 h2 { font-size: 18px; margin: 40px 0 10px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
-.verdict { margin-top: 22px; display: grid; grid-template-columns: 1fr 2fr; gap: 16px; align-items: start; }
-.verdict .k { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
-.verdict .v { font-size: 30px; font-weight: 700; line-height: 1.15; margin: 4px 0; }
-.verdict .s { color: var(--text-2); font-size: 14px; }
-.SUPPORTED { color: var(--good); } .REJECTED, .NOT.SUPPORTED { color: var(--bad); } .MIXED { color: var(--mid); }
+.answers { margin-top: 22px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.answers .card { margin: 0; }
+h3.sec { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); margin: 22px 0 8px; }
+.ans .k { font-size: 12px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.ans .v { font-size: 30px; font-weight: 700; line-height: 1.15; margin: 4px 0; }
+.ans .s { color: var(--text-2); font-size: 14px; }
+.YES { color: var(--good); } .NO { color: var(--bad); } .PARTLY, .MIXED, .TIE { color: var(--mid); }
 .c-title { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
 .c-sent { margin: 0 0 8px; color: var(--text-2); font-size: 14px; }
 .c-note { font-size: 12.5px; color: var(--text-3); margin: 6px 0 0; }
@@ -63,14 +65,14 @@ th { color: var(--text-3); font-weight: 600; }
 select { font: inherit; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
 .method { font-size: 14px; color: var(--text-2); }
 .err { color: var(--bad); }
-@media (max-width: 760px) { .verdict { grid-template-columns: 1fr; } h1 { font-size: 23px; } }
+@media (max-width: 760px) { .answers { grid-template-columns: 1fr; } h1 { font-size: 23px; } }
 </style>
 </head>
 <body>
 <main>
 <header>
-  <h1>Does NEAR Intents volume lead NEAR network usage better than price does?</h1>
-  <p><b>Hypothesis under test:</b> cross-chain volume through NEAR Intents is a better leading indicator of real network usage than the NEAR token price. This page tests that claim. It reports what the data says, including anything that cuts against it.</p>
+  <h1>Does NEAR Intents volume predict NEAR network adoption?</h1>
+  <p>Three variables: <b>NEAR Intents volume</b> (the candidate leading indicator), <b>NEAR token price</b> (the competing indicator), and a <b>Network Adoption Index</b> (active accounts, transactions and contract usage combined into one series). Fees burned on NEAR are added for Q3. The page reports what the data says, including anything that cuts against the hypothesis.</p>
   <div class="meta">
     <span id="asof">Loading data…</span>
     <span>Rebuilt daily from raw data with <code>python run.py</code></span>
@@ -79,24 +81,27 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
   </div>
 </header>
 
-<section class="card verdict" id="verdict"></section>
+<section class="answers" id="answers"></section>
 
-<h2>The data</h2>
+<h2>The variables</h2>
 <div id="charts"></div>
 
-<h2>The test</h2>
+<h2>Q1 and Q2: does this week's change predict adoption <i>k</i> weeks later?</h2>
 <div class="card">
-  <p class="c-title">Lead-lag: does this week's change predict usage <i>k</i> weeks later?</p>
   <p class="c-sent" id="ll-sent"></p>
-  <div class="controls"><label>Usage measure <select id="llsel"></select></label></div>
   <div id="c-ll" class="chart"></div>
-  <p class="c-note">The y-axis is the correlation between the predictor's weekly growth and usage growth <i>k</i> weeks later. Filled markers mean p &lt; 0.05. A leading indicator needs significant bars at k ≥ 1, not just at k = 0.</p>
+  <p class="c-note">Correlation between each predictor's weekly growth and Adoption Index growth <i>k</i> weeks later. Filled markers mean p &lt; 0.05. A leading indicator needs significant points at k ≥ 1.</p>
 </div>
 <div class="card tablewrap">
-  <p class="c-title">Predictive test with BTC as the market control</p>
-  <p class="c-sent">"p" tests whether two weekly lags of the predictor add information beyond usage's own history and BTC. "Out-of-sample" is the forecast error for the next week with the predictor, divided by the error without it, using only data before each forecast. Below 1 means the predictor helps.</p>
+  <p class="c-title">Predictive tests (controls: 2 weeks of adoption's own history, 2 weeks of BTC, a dummy for the 2 April 2026 break)</p>
+  <p class="c-sent">"p" tests whether two weekly lags of the predictor add information. "Out-of-sample" is next-week forecast error with the predictor divided by error without it, using only earlier weeks. Below 1 means the predictor helps.</p>
   <table id="ptable"></table>
+  <p class="c-title" style="margin-top:16px">Robustness: the same tests on each component and on other Intents measures</p>
+  <table id="rtable"></table>
 </div>
+
+<h2>Q3: does Intents activity turn into fees for NEAR?</h2>
+<div class="card tablewrap"><table id="q3table"></table></div>
 
 <h2>Method and limits</h2>
 <div class="card method" id="method"></div>
@@ -119,84 +124,93 @@ select { font: inherit; font-size: 13px; color: var(--text); background: var(--s
     yaxis: { gridcolor: css("--grid"), linecolor: css("--border"), zeroline: false },
   }, extra || {});
 
-  function verdict() {
-    const t = D.test, m = D.meta, cls = t.overall.replace(" ", ".");
-    const expl = {
-      "SUPPORTED": "Intents volume predicted usage better than price on most usage measures.",
-      "REJECTED": "Price predicted usage at least as well as Intents volume on most measures.",
-      "NOT SUPPORTED": "Neither Intents volume nor price predicted next week's usage beyond usage's own history and BTC.",
-      "MIXED": "The measures disagree.",
-    }[t.overall];
-    $("#verdict").innerHTML = `<div><div class="k">Result · ${m.weeks} weeks to ${m.as_of}</div><div class="v ${cls}">${t.overall}</div></div>
-      <div class="s">${expl} Intents won on <b>${t.tally.intents || 0}</b>, price on <b>${t.tally.price || 0}</b>, and neither on <b>${t.tally.neither || 0}</b> of ${t.n_targets} usage measures.
-      ${m.bq_fresh ? "" : "<br><br><b>Data note:</b> " + (m.bq_available ? `BigQuery data ends ${m.bq_last_day}, so active accounts and transactions come from NearBlocks.` : "BigQuery results are not included yet (no credentials at build time). Active accounts and transactions come from NearBlocks.")}</div>`;
+  const SEC = { Y: "Network Adoption Index (Y)", X1: "NEAR Intents volume (X1, the candidate leading indicator)", X2: "NEAR price (X2, the competing indicator)", V: "Economic value to NEAR (for Q3)" };
+  const cls = (a) => a.split(" ")[0];
+  const pf = (v) => v == null ? "n/a" : v < 0.001 ? "<0.001" : v.toFixed(3);
+  const pp = (v) => v == null ? "p n/a" : v < 0.001 ? "p < 0.001" : "p = " + v.toFixed(3);
+
+  function answers() {
+    const R = D.results, A = R.answers, q = R.q12, q3 = R.q3;
+    const card = (n, title, a, why) => `<div class="card ans"><div class="k">${n}</div><div class="s" style="margin-top:2px">${title}</div>
+      <div class="v ${cls(a)}">${esc(a)}</div><div class="s">${why}</div></div>`;
+    $("#answers").innerHTML =
+      card("Q1", "Does Intents volume predict future network adoption?", A.Q1,
+        `Adding Intents' last 2 weeks: ${pp(q.intents_alone.p)}, out-of-sample error ratio ${q.intents_alone.oos_ratio}.`) +
+      card("Q2", "Is Intents volume a better predictor than NEAR's price?", A.Q2,
+        `Intents beyond price: ${pp(q.intents_beyond_price.p)}. Price beyond Intents: ${pp(q.price_beyond_intents.p)}. Error ratios: Intents ${q.intents_alone.oos_ratio}, price ${q.price_alone.oos_ratio}.`) +
+      card("Q3", "Does Intents activity translate into economically valuable activity for NEAR?", A.Q3,
+        `Same week: +10% Intents volume ≈ ${(q3.elasticity * 10).toFixed(1)}% more fees (${pp(q3.elasticity_p)}). Fees per $1M of volume: ${(q3.capture_change * 100).toFixed(0)}% from ${q3.capture_first_q_label} to ${q3.capture_last_q_label}.`);
   }
 
   function charts() {
     const box = $("#charts");
-    box.innerHTML = D.charts.map((c) => `<div class="card">
-      <p class="c-title">${esc(c.title)}</p><p class="c-sent">${esc(c.sentence)}</p>
-      ${Object.keys(c.series).length ? `<div id="c-${c.id}" class="chart"></div>` : `<div class="na">Not computed. See the note above.</div>`}
-      ${c.note ? `<p class="c-note">${esc(c.note)}</p>` : ""}
-      <details><summary>Query behind this chart</summary><pre>${esc(c.query)}</pre></details></div>`).join("");
+    let last = null, html = "";
+    D.charts.forEach((c) => {
+      if (c.section !== last) { html += `<h3 class="sec">${SEC[c.section]}</h3>`; last = c.section; }
+      html += `<div class="card"><p class="c-title">${esc(c.title)}</p><p class="c-sent">${esc(c.sentence)}</p>
+        ${Object.keys(c.series).length ? `<div id="c-${c.id}" class="chart"></div>` : `<div class="na">Not computed. See the note above.</div>`}
+        ${c.note ? `<p class="c-note">${esc(c.note)}</p>` : ""}
+        <details><summary>Query behind this chart</summary><pre>${esc(c.query)}</pre></details></div>`;
+    });
+    box.innerHTML = html;
     D.charts.forEach((c) => {
       const names = Object.keys(c.series);
       if (!names.length) return;
-      const isLog = c.kind === "log";
-      Plotly.react("c-" + c.id, names.map((n, i) => ({ type: "scatter", mode: "lines", name: n, x: D.dates, y: c.series[n],
-        line: { color: css(COLORS[i % 3]), width: 2 }, connectgaps: false })),
-        layout({ showlegend: names.length > 1, yaxis: { gridcolor: css("--grid"), zeroline: false, type: isLog ? "log" : "linear",
-          tickformat: c.unit === "$" ? "$~s" : "~s", hoverformat: c.unit === "$" ? "$,.3~s" : ",.4~s" } }), cfg);
+      Plotly.react("c-" + c.id, names.map((n, i) => ({ type: "scatter", mode: "lines", name: n, x: c.x, y: c.series[n],
+        line: { color: css(COLORS[i % 3]), width: i === 0 ? 2.5 : 1.5 }, connectgaps: false })),
+        layout({ showlegend: names.length > 1, yaxis: { gridcolor: css("--grid"), zeroline: false, type: c.kind === "log" ? "log" : "linear",
+          tickformat: c.unit === "$" ? "$~s" : "~s", hoverformat: c.unit === "$" ? "$,.4~s" : ",.4~s" } }), cfg);
     });
   }
 
   function leadLag() {
-    const t = $("#llsel").value, res = D.test.results[t];
-    const preds = Object.keys(res);
+    const q = D.results.q12, L = D.meta.labels, preds = Object.keys(q.lead_lag);
     Plotly.react("c-ll", preds.map((x, i) => {
-      const L = res[x].lead_lag, col = css(COLORS[i % 3]);
-      return { type: "scatter", mode: "lines+markers", name: D.meta.predictors[x], x: L.map((r) => r.lag), y: L.map((r) => r.r),
-        line: { color: col, width: 2 },
-        marker: { size: 9, color: L.map((r) => r.p != null && r.p < 0.05 ? col : css("--surface")), line: { color: col, width: 2 } },
-        customdata: L.map((r) => [r.p, r.n]), hovertemplate: "k=%{x}: r=%{y:.2f} (p=%{customdata[0]}, n=%{customdata[1]})<extra>" + D.meta.predictors[x] + "</extra>" };
+      const ll = q.lead_lag[x], col = css(COLORS[i % 3]);
+      return { type: "scatter", mode: "lines+markers", name: L[x] || x, x: ll.map((r) => r.lag), y: ll.map((r) => r.r),
+        line: { color: col, width: 2 }, marker: { size: 9, color: ll.map((r) => r.p != null && r.p < 0.05 ? col : css("--surface")), line: { color: col, width: 2 } },
+        customdata: ll.map((r) => [r.p, r.n]), hovertemplate: "k=%{x}: r=%{y:.2f} (p=%{customdata[0]}, n=%{customdata[1]})<extra>" + (L[x] || x) + "</extra>" };
     }), layout({ hovermode: "closest", shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 0, y1: 0, line: { color: css("--zero"), width: 1, dash: "dot" } }],
       xaxis: { gridcolor: css("--grid"), zeroline: false, dtick: 1, title: { text: "weeks ahead (k)" } },
       yaxis: { gridcolor: css("--grid"), zeroline: false, range: [-0.6, 0.6], title: { text: "correlation r" } } }), cfg);
-    const best = preds.map((x) => res[x].lead_lag.filter((r) => r.lag >= 1 && r.p != null && r.p < 0.05).length);
-    $("#ll-sent").textContent = preds.map((x, i) => `${D.meta.predictors[x]}: ${best[i]} significant lead${best[i] === 1 ? "" : "s"} at k = 1–${D.meta.max_lead}`).join(" · ") + ".";
+    $("#ll-sent").textContent = preds.map((x) => `${L[x] || x}: ${q.lead_lag[x].filter((r) => r.lag >= 1 && r.p != null && r.p < 0.05).length} significant leads at k = 1–${D.meta.max_lead}`).join(" · ") + ".";
   }
 
-  function pTable() {
-    const V = D.test.verdicts, R = D.test.results, P = D.meta.predictors;
-    let h = "<thead><tr><th>Usage measure</th><th>Predictor</th><th>p (lags add info?)</th><th>Out-of-sample error ratio</th><th>Weeks</th><th>Winner</th></tr></thead><tbody>";
-    for (const t of Object.keys(R)) {
-      const preds = Object.keys(R[t]);
-      preds.forEach((x, i) => {
-        const r = R[t][x];
-        h += `<tr><td>${i === 0 ? esc(D.meta.targets[t]) : ""}</td><td>${esc(P[x])}</td><td>${r.p ?? "n/a"}</td><td>${r.oos_ratio ?? "n/a"}</td><td>${r.n ?? ""}</td><td>${i === 0 ? V[t].winner : ""}</td></tr>`;
-      });
-    }
-    $("#ptable").innerHTML = h + "</tbody>";
+  function tables() {
+    const q = D.results.q12, L = D.meta.labels;
+    const row = (n, r) => `<tr><td>${n}</td><td>${pf(r.p)}</td><td>${r.oos_ratio ?? "n/a"}</td><td>${r.n ?? ""}</td></tr>`;
+    $("#ptable").innerHTML = "<thead><tr><th>Model (target: Adoption Index)</th><th>p</th><th>Out-of-sample error ratio</th><th>Weeks</th></tr></thead><tbody>" +
+      row("Q1: Intents volume alone", q.intents_alone) + row("NEAR price alone", q.price_alone) +
+      row("Q2: Intents, given price is already in the model", q.intents_beyond_price) + row("Q2: Price, given Intents is already in the model", q.price_beyond_intents) + "</tbody>";
+    const R = D.results.q12_robustness;
+    $("#rtable").innerHTML = "<thead><tr><th>Target ~ Intents measure</th><th>Q1</th><th>Q2</th><th>Intents p</th><th>Intents ratio</th><th>Price p</th><th>Price ratio</th></tr></thead><tbody>" +
+      Object.entries(R).map(([k, v]) => { const [t, x] = k.split("~"); return `<tr><td>${esc((L[t] || t) + " ~ " + (L[x] || x))}</td><td>${v.q1}</td><td>${esc(v.q2)}</td><td>${pf(v.intents_alone.p)}</td><td>${v.intents_alone.oos_ratio}</td><td>${pf(v.price_alone.p)}</td><td>${v.price_alone.oos_ratio}</td></tr>`; }).join("") + "</tbody>";
+    const a = D.results.q3, b = D.results.q3_usd;
+    $("#q3table").innerHTML = `<thead><tr><th>Q3 test</th><th>Result</th><th>Reading</th></tr></thead><tbody>
+      <tr><td>Same-week elasticity of fees in NEAR to Intents volume (BTC-controlled)</td><td>${a.elasticity} (95% CI ${a.elasticity_ci.join(" to ")}), ${pp(a.elasticity_p)}</td><td>Fees rise ${(a.elasticity * 10).toFixed(1)}% when Intents volume rises 10% in the same week</td></tr>
+      <tr><td>Same, fees in USD</td><td>${b.elasticity}, ${pp(b.elasticity_p)}</td><td>${b.elasticity_p < 0.05 ? "Also significant" : "Not significant"}</td></tr>
+      <tr><td>Do Intents' last 2 weeks predict fees?</td><td>${pp(a.predictive.p)}, error ratio ${a.predictive.oos_ratio}</td><td>${a.predictive.p < 0.05 && a.predictive.oos_ratio < 1 ? "Yes" : "No: they move together, but Intents doesn't lead"}</td></tr>
+      <tr><td>NEAR fees per $1M of Intents volume</td><td>$${a.capture_first_q} (${a.capture_first_q_label}) → $${a.capture_last_q} (${a.capture_last_q_label})</td><td>${(a.capture_change * 100).toFixed(0)}%. The first quarter is Intents' launch; see the chart for every quarter.</td></tr>
+      <tr><td><b>Answer</b></td><td colspan="2"><b>${a.verdict}</b></td></tr></tbody>`;
   }
 
   function method() {
     const m = D.meta, fr = m.bq_freshness;
     $("#method").innerHTML = `
-      <p><b>Weekly growth, not levels.</b> Every series is aggregated to complete Monday–Sunday weeks and converted to the week-on-week change in log level. Two series that both trend over two years would otherwise look related even if they aren't.</p>
-      <p><b>Tests, fixed before looking at results.</b> (1) Correlation at leads of 0–${m.max_lead} weeks. (2) A regression of usage growth on ${m.lags} of its own weekly lags plus ${m.lags} lags of BTC, adding ${m.lags} lags of the predictor, with an F-test (α = ${m.alpha}). (3) Next-week forecasts on an expanding window from the middle of the sample. Intents "wins" a usage measure only when it passes (2), improves (3), and does better than price on (3).</p>
-      <p><b>Why swap counts as well as USD.</b> USD volume rises when crypto prices rise even if no more people swap. If only the USD series worked, that would point to price, not usage.</p>
-      <p><b>Sampling.</b> The Explorer API allows 1 request every 5 seconds, so swaps are counted in 2 random UTC hours per day and scaled by 24. The hours are uniformly random and seeded by date, so the sample is reproducible and the estimate unbiased. Unique senders can't be scaled from hours to days, so they are only reported per sampled hour.</p>
-      <p><b>BigQuery.</b> ${fr ? "Freshness check: " + esc(JSON.stringify(fr)) + "." : "Not queried yet: no credentials were available at build time."} NEAR Lake, the BigQuery source, was deprecated on 2026-03-24, so dates after the dataset's last partition come from NearBlocks and are labelled as such.</p>
-      <p><b>Not computable from these sources</b> (listed in THESIS.md): Intents volume that doesn't go through 1Click (the Explorer only covers 1Click swaps); daily unique swappers; and swap data before the Explorer's history begins in 2025.</p>`;
+      <p><b>Adoption Index.</b> The geometric mean of ${m.adoption_components.map((c) => (m.labels[c] || c).toLowerCase()).join(", ")}, each indexed to 100 in the first week. Source: ${m.usage_source}. ${m.adoption_components.includes("contract_calls") ? "" : "Contract usage joins once BigQuery data covers the whole window. NearBlocks' contract field is excluded because it is dominated by one automated sender."}</p>
+      <p><b>Weekly growth, not levels.</b> Complete Monday–Sunday weeks, as the week-on-week change in log level. Two series that both trend over two years would otherwise look related even if they aren't.</p>
+      <p><b>One break, handled once.</b> On ${m.break_days.join(", ")}, NEAR transactions fell 72% and fees 62% in a day while active accounts barely moved. That is consistent with one large automated sender stopping. That week gets a dummy in every regression, and no other data points are adjusted.</p>
+      <p><b>Verdict rules, fixed before looking at results</b> (coded in <code>pipeline/hypothesis.py</code>). Q1 is YES when Intents passes the F-test and improves out-of-sample forecasts. Q2 is YES when Intents adds information beyond price, price adds none beyond Intents, and Intents forecasts better. Q3 is YES when fees rise with Intents volume (p &lt; 0.05) and fees per dollar of volume didn't fall by more than half.</p>
+      <p><b>Sampling.</b> The Explorer API allows 1 request every 5 seconds, so swaps are counted in 2 random UTC hours per day (seeded by date) and scaled up. ${m.sampled_hours ? m.sampled_hours + " hours are sampled so far." : ""}</p>
+      <p><b>BigQuery.</b> ${fr ? "Freshness check: " + esc(JSON.stringify(fr)) + "." : "Not queried yet: no credentials were available at build time."} NEAR Lake, the dataset's source, was deprecated on 2026-03-24.</p>
+      <p><b>Not computable from these sources</b> (see THESIS.md): Intents volume outside 1Click; daily unique swappers; fees paid specifically by Intents transactions without BigQuery gas data.</p>`;
   }
 
-  function renderAll() { verdict(); charts(); leadLag(); pTable(); method(); }
+  function renderAll() { answers(); charts(); leadLag(); tables(); method(); }
 
   fetch("data/thesis.json", { cache: "no-cache" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); }).then((d) => {
     D = d;
-    $("#asof").textContent = `Data ${d.meta.start} to ${d.meta.as_of} · built ${d.meta.built_at.replace("T", " ").replace("Z", " UTC")}`;
-    $("#llsel").innerHTML = Object.keys(d.test.results).map((t) => `<option value="${t}">${esc(d.meta.targets[t])}</option>`).join("");
-    $("#llsel").onchange = leadLag;
+    $("#asof").textContent = `Weeks ${d.meta.start} to ${d.meta.as_of} (${d.meta.weeks}) · built ${d.meta.built_at.replace("T", " ").replace("Z", " UTC")}`;
     renderAll();
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
   }).catch((e) => { $("#asof").innerHTML = `<span class="err">Could not load data/thesis.json (${e.message}). Run <code>python run.py</code>, then serve <code>docs/</code>.</span>`; });

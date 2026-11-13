@@ -1,6 +1,6 @@
-"""Build docs/data/thesis.json and reports/thesis_results.md for the
-hypothesis test. Every chart carries: its data, the exact query/API call behind
-it, and one plain sentence computed from the data (never typed by hand).
+"""Build docs/data/thesis.json and reports/thesis_results.md for the three
+questions in pipeline/hypothesis.py. Every chart carries its data, the exact
+query/API call behind it, and one plain sentence computed from the data.
 A metric whose source is unavailable is marked "not computed", never filled.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ RAW = ROOT / "data" / "raw"
 PROCESSED = ROOT / "data" / "processed"
 OUT = ROOT / "docs" / "data" / "thesis.json"
 REPORT = ROOT / "reports" / "thesis_results.md"
-START = pd.Timestamp("2024-12-01")  # first full month of NEAR Intents data on DefiLlama
+START = pd.Timestamp("2024-12-09")  # first Monday after NEAR Intents appears on DefiLlama (2024-12-10)
 
 NEARBLOCKS_Q = "GET https://api.nearblocks.io/v1/charts  ->  fields: {f}  (daily, public, no key)"
 LLAMA_Q = "GET https://api.llama.fi/summary/dexs/near-intents  ->  totalDataChart (daily USD volume, public, no key)"
@@ -28,7 +28,11 @@ EXPLORER_Q = ("GET https://explorer.near-intents.org/api/v0/transactions"
               "?startTimestampUnix=<hour start>&endTimestampUnix=<hour end>&numberOfTransactions=1000\n"
               "Authorization: Bearer $NEAR_INTENTS_JWT\n"
               "-> 2 random UTC hours per day (seeded by date), every swap in each hour (paged);\n"
-              "   daily swaps = mean(successful swaps per sampled hour) x 24")
+              "   swaps = mean(successful swaps per sampled hour) x 24 per day, x 168 per week")
+LABELS = {"active_accounts": "Active accounts", "transactions": "Transactions", "contract_calls": "Contract calls",
+          "adoption": "Adoption Index", "intents_usd": "NEAR Intents volume (USD)",
+          "intents_swaps": "NEAR Intents swaps (sampled)", "near_price": "NEAR price",
+          "fees_native": "Fees burned (NEAR)", "fees_usd": "Fees (USD)"}
 
 
 def _sql(name: str) -> str:
@@ -46,41 +50,46 @@ def _fmt(v):
     return f"{v/1e9:.2f}B" if a >= 1e9 else f"{v/1e6:.2f}M" if a >= 1e6 else f"{v/1e3:.1f}K" if a >= 1e3 else f"{v:,.2f}"
 
 
-def _chg(s: pd.Series, days=30):
-    s = s.dropna()
-    if len(s) < days + 365:
-        return None
-    now = s.iloc[-days:].mean()
-    then = s.loc[s.index[-1] - pd.Timedelta(days=365 + days - 1): s.index[-1] - pd.Timedelta(days=365)].mean()
-    return now / then - 1 if then else None
-
-
 def assemble() -> tuple[pd.DataFrame, dict]:
     nb = pd.read_csv(RAW / "near_nearblocks.csv", parse_dates=["date"], index_col="date")
     ll = pd.read_csv(RAW / "intents_llama.csv", parse_dates=["date"], index_col="date")
     btc = pd.read_csv(RAW / "btc_price.csv", parse_dates=["date"], index_col="date")
-    est = intents.daily_estimates()
     df = pd.DataFrame(index=pd.date_range(START, nb.index.max(), freq="D"))
     df["near_price"] = nb["price_usd"]
-    df["nb_active_accounts"] = nb["active_accounts"]
-    df["nb_transactions"] = nb["txns"]
+    df["fees_native"] = nb["fees_native"]
+    df["fees_usd"] = nb["fees_usd_nearblocks"]
     df["intents_usd"] = ll["intents_volume_usd_llama"]
     df["btc_price"] = btc["btc_price_usd"]
+    est = intents.daily_estimates()
     if len(est):
         df["intents_swaps"] = est["swaps_est"]
         df["intents_usd_explorer"] = est["usd_est"]
-        df["intents_senders_per_hour"] = est["senders_per_hour"]
         df["intents_sampled_hours"] = est["sampled_hours"]
+
     meta = {"bq_available": False, "bq_freshness": bq.load_freshness()}
     act, cu = bq.load("bq_daily_activity"), bq.load("bq_contract_usage")
+    yesterday = df.index.max()
+    bq_fresh = act is not None and act.index.max() >= yesterday - pd.Timedelta(days=7)
+    meta["bq_available"] = act is not None
+    meta["bq_fresh"] = bool(bq_fresh)
     if act is not None:
-        df["bq_active_accounts"] = act["active_accounts"]
-        df["bq_transactions"] = act["transactions"]
-        meta["bq_available"] = True
         meta["bq_last_day"] = act.index.max().strftime("%Y-%m-%d")
+    # Usage: BigQuery when it is current; otherwise NearBlocks for the whole window
+    # (never spliced: the two sources define these counts differently).
+    if bq_fresh:
+        df["active_accounts"] = act["active_accounts"]
+        df["transactions"] = act["transactions"]
+        meta["usage_source"] = "BigQuery"
+    else:
+        df["active_accounts"] = nb["active_accounts"]
+        df["transactions"] = nb["txns"]
+        meta["usage_source"] = "NearBlocks"
     if cu is not None:
-        for c in ["function_calls", "contracts_called", "intents_contract_calls", "intents_contract_callers"]:
-            df[f"bq_{c}"] = cu[c]
+        df["bq_contract_calls"] = cu["function_calls"]
+        df["bq_contracts_called"] = cu["contracts_called"]
+        df["bq_intents_contract_calls"] = cu["intents_contract_calls"]
+        if bq_fresh:
+            df["contract_calls"] = cu["function_calls"]
     today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
     return df[df.index < today], meta
 
@@ -89,110 +98,104 @@ def build() -> dict:
     df, meta = assemble()
     PROCESSED.mkdir(parents=True, exist_ok=True)
     df.to_csv(PROCESSED / "thesis_daily.csv", float_format="%.6g")
-    yesterday = df.index.max()
-    bq_fresh = bool(meta["bq_available"] and pd.Timestamp(meta["bq_last_day"]) >= yesterday - pd.Timedelta(days=7))
-    meta["bq_fresh"] = bq_fresh
 
-    # ---------------- targets: BigQuery when fresh, else NearBlocks (labelled)
-    if bq_fresh:
-        targets = {"bq_active_accounts": "Active accounts (BigQuery)", "bq_transactions": "Transactions (BigQuery)",
-                   "bq_function_calls": "Contract calls (BigQuery)", "bq_contracts_called": "Distinct contracts called (BigQuery)"}
-    else:
-        targets = {"nb_active_accounts": "Active accounts (NearBlocks)", "nb_transactions": "Transactions (NearBlocks)"}
-        if meta["bq_available"]:  # stale BigQuery still gives contract usage over its own window
-            targets.update({"bq_function_calls": "Contract calls (BigQuery, to its last day)",
-                            "bq_contracts_called": "Distinct contracts called (BigQuery, to its last day)"})
-    how = {**{t: "mean" for t in targets}, "intents_usd": "sum", "near_price": "mean", "btc_price": "mean"}
+    comps = ["active_accounts", "transactions"] + (["contract_calls"] if "contract_calls" in df and df["contract_calls"].notna().sum() > 200 else [])
+    meta["adoption_components"] = comps
+    how = {"active_accounts": "mean", "transactions": "mean", "contract_calls": "mean",
+           "intents_usd": "sum", "near_price": "mean", "btc_price": "mean",
+           "fees_native": "sum", "fees_usd": "sum"}
     w = H.weekly(df, how)
-    # weekly swaps from the sampled hours directly: mean hourly x 168 (more precise than summing days)
+    measures = ["intents_usd"]
     if (RAW / "intents_hour_samples.csv").exists():
         s = pd.read_csv(RAW / "intents_hour_samples.csv", parse_dates=["date"]).drop_duplicates(["date", "hour"])
         g = s.set_index("date")["swaps_success"].resample("W-SUN")
-        sw = (g.mean() * 168).where(g.count() >= 7)
-        w["intents_swaps"] = sw.reindex(w.index)
-        se = (g.std() / np.sqrt(g.count()) * 168).reindex(w.index)
-        meta["weekly_swaps_rel_se_median"] = float((se / w["intents_swaps"]).median()) if w["intents_swaps"].notna().any() else None
+        sw = (g.mean() * 168).where(g.count() >= 7).reindex(w.index)
+        if sw.notna().sum() >= 30:
+            w["intents_swaps"] = sw
+            measures.append("intents_swaps")
+            se = (g.std() / np.sqrt(g.count()) * 168).reindex(w.index)
+            meta["weekly_swaps_rel_se_median"] = round(float((se / sw).median()), 3)
+        meta["sampled_hours"] = int(len(s))
+    res = H.run(w, comps, measures)
+    w["adoption"] = res.pop("adoption_weekly")
     w.to_csv(PROCESSED / "thesis_weekly.csv", float_format="%.6g")
-    res = H.run(w, targets)
 
-    # ---------------- charts (daily, 7-day average), each with query + sentence
+    # ------------------------------------------------------------- charts
+    wk = [d.strftime("%Y-%m-%d") for d in w.index]
     d7 = df.rolling(7, min_periods=5).mean()
-    dates = [x.strftime("%Y-%m-%d") for x in df.index]
+    days = [d.strftime("%Y-%m-%d") for d in df.index]
     charts = []
 
-    def add(cid, title, series, query, sentence, kind="line", unit="", note=None):
-        charts.append({"id": cid, "title": title, "series": series, "query": query,
+    def add(cid, section, title, x, series, query, sentence, kind="line", unit="", note=None):
+        charts.append({"id": cid, "section": section, "title": title, "x": x, "series": series, "query": query,
                        "sentence": sentence, "kind": kind, "unit": unit, "note": note})
 
-    act_col = "bq_active_accounts" if bq_fresh else "nb_active_accounts"
-    tx_col = "bq_transactions" if bq_fresh else "nb_transactions"
-    act_q = _sql("01_daily_activity.sql") if bq_fresh else NEARBLOCKS_Q.format(f="active_accounts")
-    tx_q = _sql("01_daily_activity.sql") if bq_fresh else NEARBLOCKS_Q.format(f="txns")
-    a30, ach = df[act_col].iloc[-30:].mean(), _chg(df[act_col])
-    add("active", "Daily active accounts", {"Active accounts (7-day avg)": _r(d7[act_col], 0)}, act_q,
-        f"NEAR averaged {_fmt(a30)} active accounts a day over the last 30 days"
-        + (f", {ach:+.0%} versus the same 30 days a year earlier." if ach is not None else "."))
-    t30, tch = df[tx_col].iloc[-30:].mean(), _chg(df[tx_col])
-    add("txns", "Daily transactions", {"Transactions (7-day avg)": _r(d7[tx_col], 0)}, tx_q,
-        f"NEAR processed {_fmt(t30)} transactions a day over the last 30 days"
-        + (f", {tch:+.0%} versus a year earlier." if tch is not None else "."))
-
-    if meta["bq_available"] and "bq_function_calls" in df:
-        last = meta["bq_last_day"]
-        cc = df["bq_contracts_called"].dropna()
-        add("contracts", "Contract usage", {"Contract calls (7-day avg)": _r(d7["bq_function_calls"], 0)},
-            _sql("02_contract_usage.sql"),
-            f"Up to {last}, NEAR saw {_fmt(df['bq_function_calls'].dropna().iloc[-30:].mean())} contract calls a day "
-            f"across {_fmt(cc.iloc[-30:].mean())} distinct contracts (30-day averages).")
-        ic = df["bq_intents_contract_calls"].dropna()
-        add("intents_onchain", "On-chain calls to intents.near", {"Calls to intents.near (7-day avg)": _r(d7["bq_intents_contract_calls"], 0)},
-            _sql("02_contract_usage.sql"),
-            f"The intents.near contract received {_fmt(ic.iloc[-30:].mean())} calls a day in the 30 days to {last}.")
-    else:
-        add("contracts", "Contract usage", {}, _sql("02_contract_usage.sql"),
-            "Not computed yet: BigQuery credentials were not available when this page was built.")
+    usage_q = _sql("01_daily_activity.sql") if meta["usage_source"] == "BigQuery" else \
+        NEARBLOCKS_Q.format(f="active_accounts, txns") + "\n(BigQuery: " + (
+            f"data ends {meta.get('bq_last_day')}, so it is not used for the current window)" if meta["bq_available"]
+            else "not queried - no credentials at build time)")
+    a = w["adoption"].dropna()
+    comp_idx = {LABELS[c]: _r(w[c] / w[c].dropna().iloc[0] * 100, 1) for c in comps}
+    add("adoption", "Y", "Network Adoption Index (weekly, first week = 100)", wk,
+        {"Adoption Index": _r(w["adoption"], 1), **comp_idx},
+        usage_q + ("\n\n" + _sql("02_contract_usage.sql") if "contract_calls" in comps else ""),
+        f"The Adoption Index ({', '.join(LABELS[c].lower() for c in comps)}) went from 100 in the week of "
+        f"{a.index[0].date()} to {a.iloc[-1]:,.1f} in the week of {a.index[-1].date()}.",
+        kind="log",
+        note=None if "contract_calls" in comps else
+        "Contract usage is not in the index yet: it needs BigQuery data that covers the whole window. "
+        "NearBlocks' own contract field is not used because it is dominated by one automated sender (see THESIS.md).")
 
     iv = df["intents_usd"].dropna()
-    add("intents_usd", "NEAR Intents volume (USD)", {"DefiLlama, complete (7-day avg)": _r(d7["intents_usd"], 0),
-        **({"Explorer API, sampled estimate (7-day avg)": _r(d7["intents_usd_explorer"], 0)} if "intents_usd_explorer" in d7 else {})},
+    add("intents_usd", "X1", "NEAR Intents volume (USD, daily, 7-day average)", days,
+        {"DefiLlama (complete)": _r(d7["intents_usd"], 0),
+         **({"Explorer API (sampled estimate)": _r(df["intents_usd_explorer"].rolling(7, min_periods=3).mean(), 0)} if "intents_usd_explorer" in df else {})},
         LLAMA_Q + "\n\n" + EXPLORER_Q,
-        f"NEAR Intents moved ${_fmt(iv.iloc[-30:].mean())} a day over the last 30 days; "
-        f"it moved ${_fmt(iv.iloc[:30].mean())} a day in its first 30 days on DefiLlama ({iv.index[0].date()}).", unit="$")
-
-    if "intents_swaps" in df and df["intents_swaps"].notna().sum() > 30:
-        sw = df["intents_swaps"].dropna()
-        cover = int(df["intents_sampled_hours"].sum())
-        add("intents_swaps", "NEAR Intents swaps per day (sampled)", {"Estimated successful swaps (7-day avg)": _r(d7["intents_swaps"], 0)},
-            EXPLORER_Q,
-            f"From {cover} sampled hours, NEAR Intents handled about {_fmt(sw.iloc[-30:].mean())} successful swaps a day over the last 30 days.",
-            note=f"Estimate from sampled hours; median weekly relative standard error {meta.get('weekly_swaps_rel_se_median', 0):.0%}.")
+        f"NEAR Intents moved ${_fmt(iv.iloc[-30:].mean())} a day over the last 30 days, against "
+        f"${_fmt(iv.iloc[:30].mean())} a day in its first 30 days on DefiLlama.", unit="$", kind="log",
+        note="The Explorer API covers 1Click swaps only, a subset of all NEAR Intents volume, and each day is "
+             "estimated from 2 sampled hours, so its line sits below DefiLlama's and is noisier. DefiLlama is used in the tests.")
+    if "intents_swaps" in w:
+        sw = w["intents_swaps"].dropna()
+        add("intents_swaps", "X1", "NEAR Intents successful swaps (weekly, sampled)", wk,
+            {"Estimated swaps per week": _r(w["intents_swaps"], 0)}, EXPLORER_Q,
+            f"From {meta['sampled_hours']} sampled hours: about {_fmt(sw.iloc[-4:].mean())} successful swaps a week "
+            f"in the last 4 weeks, against {_fmt(sw.iloc[:4].mean())} in the first 4 sampled weeks.",
+            note=f"Estimate from 2 random hours per day; median weekly relative standard error "
+                 f"{meta.get('weekly_swaps_rel_se_median', 0):.0%}.")
     else:
-        add("intents_swaps", "NEAR Intents swaps per day (sampled)", {}, EXPLORER_Q,
-            "Not computed yet: the Explorer API sample has not been collected.")
+        add("intents_swaps", "X1", "NEAR Intents successful swaps (weekly, sampled)", wk, {}, EXPLORER_Q,
+            "Not computed yet: fewer than 30 weeks of the Explorer API sample have been collected.")
 
-    base = df[["near_price", "btc_price"]].dropna().iloc[0]
-    add("price", "NEAR and BTC price (indexed, first day = 100)",
-        {"NEAR": _r(df["near_price"] / base["near_price"] * 100, 1), "BTC (market control)": _r(df["btc_price"] / base["btc_price"] * 100, 1)},
+    p0 = df[["near_price", "btc_price"]].dropna().iloc[0]
+    add("price", "X2", "NEAR price, with BTC as the market control (indexed, first day = 100)", days,
+        {"NEAR": _r(df["near_price"] / p0["near_price"] * 100, 1), "BTC": _r(df["btc_price"] / p0["btc_price"] * 100, 1)},
         NEARBLOCKS_Q.format(f="near_price") + "\n" + BTC_Q,
-        f"Since {df.index[0].date()}, NEAR's price changed {df['near_price'].dropna().iloc[-1]/base['near_price']-1:+.0%} and BTC's {df['btc_price'].dropna().iloc[-1]/base['btc_price']-1:+.0%}.")
+        f"Since {df.index[0].date()}, NEAR's price changed {df['near_price'].dropna().iloc[-1]/p0['near_price']-1:+.0%} and BTC's "
+        f"{df['btc_price'].dropna().iloc[-1]/p0['btc_price']-1:+.0%}.")
 
-    lv = df[[act_col, "intents_usd"]].dropna()
-    b2 = lv.iloc[:30].mean()
-    add("levels", "Intents volume vs active accounts (indexed, first 30 days = 100)",
-        {"NEAR Intents volume": _r(d7["intents_usd"] / b2["intents_usd"] * 100, 1),
-         "Active accounts": _r(d7[act_col] / b2[act_col] * 100, 1)},
-        "Derived from the two charts above (same queries).",
-        f"Over the whole period Intents volume ended at {lv['intents_usd'].iloc[-30:].mean()/b2['intents_usd']*100:,.0f} "
-        f"and active accounts at {lv[act_col].iloc[-30:].mean()/b2[act_col]*100:,.0f} (start = 100): in levels they moved "
-        + ("in opposite directions." if (lv['intents_usd'].iloc[-30:].mean() > b2['intents_usd']) != (lv[act_col].iloc[-30:].mean() > b2[act_col]) else "the same way."),
-        kind="log")
+    q3 = res["q3"]
+    fn = df["fees_native"].dropna()
+    add("fees", "V", "Fees burned on NEAR (NEAR per day, 7-day average)", days,
+        {"Fees (NEAR)": _r(d7["fees_native"], 1)}, NEARBLOCKS_Q.format(f="txn_fee (yoctoNEAR / 1e24)"),
+        f"NEAR users paid {_fmt(fn.iloc[-30:].mean())} NEAR a day in fees over the last 30 days, against "
+        f"{_fmt(fn.iloc[:30].mean())} NEAR a day at the start of the window.",
+        note="2 April 2026: transactions -72% and fees -62% in one day while active accounts barely moved, "
+             "consistent with one large automated sender stopping. That week gets a dummy in every test.")
+    cap = (w["fees_usd"] / w["intents_usd"] * 1e6).replace([np.inf, -np.inf], np.nan)
+    add("capture", "V", "NEAR fees per $1M of NEAR Intents volume (weekly)", wk,
+        {"Fees (USD) per $1M Intents volume": _r(cap, 2)},
+        NEARBLOCKS_Q.format(f="txn_fee_usd") + "\n" + LLAMA_Q,
+        f"In {q3.get('capture_first_q_label')} NEAR earned ${q3.get('capture_first_q')} in fees per $1M of Intents volume; "
+        f"in {q3.get('capture_last_q_label')} it earned ${q3.get('capture_last_q')} "
+        f"({(q3.get('capture_change') or 0):+.0%}).", kind="log", unit="$")
 
     out = {
         "meta": {**meta, "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                  "as_of": df.index.max().strftime("%Y-%m-%d"), "start": df.index[0].strftime("%Y-%m-%d"),
-                 "targets": targets, "predictors": H.PREDICTORS, "lags": H.LAGS, "max_lead": H.MAX_LEAD, "alpha": H.ALPHA,
-                 "weeks": int(len(w))},
-        "dates": dates, "charts": charts, "test": res,
+                 "weeks": int(w["adoption"].notna().sum()), "labels": LABELS, "lags": H.LAGS,
+                 "max_lead": H.MAX_LEAD, "alpha": H.ALPHA, "break_days": H.BREAK_DAYS},
+        "charts": charts, "results": res,
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, separators=(",", ":"), allow_nan=False, default=str))
@@ -200,32 +203,50 @@ def build() -> dict:
     return out
 
 
+def _row(name, r):
+    return f"| {name} | {r.get('p')} | {r.get('oos_ratio')} | {r.get('n')} |"
+
+
 def _report(o: dict) -> None:
-    m, t = o["meta"], o["test"]
-    L = ["# Hypothesis test - latest results", "",
-         f"_Generated by `python run.py` on {m['built_at']}; data {m['start']} to {m['as_of']} ({m['weeks']} complete weeks). "
-         "Do not edit by hand._", "",
-         "**Hypothesis:** cross-chain volume through NEAR Intents is a better leading indicator of real network usage than token price.", "",
-         f"## Overall: **{t['overall']}** (Intents won {t['tally'].get('intents', 0)}, price won {t['tally'].get('price', 0)}, "
-         f"neither {t['tally'].get('neither', 0)} of {t['n_targets']} usage measures)", "",
-         "| Usage measure | Winner | Best Intents measure | Intents p | Intents OOS ratio | Price p | Price OOS ratio |",
-         "|---|---|---|---:|---:|---:|---:|"]
-    for k, v in t["verdicts"].items():
-        L.append(f"| {m['targets'][k]} | {v['winner']} | {v['best_intents_measure']} | {v['intents_p']} | {v['intents_oos_ratio']} | {v['price_p']} | {v['price_oos_ratio']} |")
-    L += ["", "p = in-sample F-test that 2 weekly lags of the predictor add nothing (controls: own lags, BTC). "
-          "OOS ratio = out-of-sample RMSE with the predictor / without it (< 1 = it helps forecast next week).", "",
-          "## Lead-lag correlations (weekly growth; r at lag k = predictor this week vs usage k weeks later)", ""]
-    for k, res in t["results"].items():
-        L.append(f"### {m['targets'][k]}")
-        L.append("| Predictor | " + " | ".join(f"k={i}" for i in range(m["max_lead"] + 1)) + " |")
-        L.append("|---|" + "---:|" * (m["max_lead"] + 1))
-        for x, r in res.items():
-            L.append(f"| {m['predictors'][x]} | " + " | ".join("n/a" if c["r"] is None else (f"**{c['r']}**" if c["p"] < 0.05 else f"{c['r']}") for c in r["lead_lag"]) + " |")
-        L.append("")
-    L += ["Bold = p < 0.05.", "", "## Data availability", ""]
-    fr = m.get("bq_freshness")
+    m, r = o["meta"], o["results"]
+    q, q3 = r["q12"], r["q3"]
+    L = ["# Results - three questions", "",
+         f"_Generated by `python run.py` on {m['built_at']}; weeks {m['start']} to {m['as_of']} "
+         f"({m['weeks']} weeks with an Adoption Index). Usage source: {m['usage_source']}. "
+         f"Adoption Index components: {', '.join(m['adoption_components'])}. Do not edit by hand._", "",
+         "| Question | Answer |", "|---|---|",
+         f"| Q1. Does Intents volume predict future network adoption? | **{r['answers']['Q1']}** |",
+         f"| Q2. Is Intents volume a better predictor than NEAR's price? | **{r['answers']['Q2']}** |",
+         f"| Q3. Does Intents activity translate into economically valuable activity for NEAR? | **{r['answers']['Q3']}** |", "",
+         "## Q1 and Q2: predicting next week's Adoption Index", "",
+         "p = F-test that 2 weekly lags of the predictor add nothing (controls: own lags, BTC lags, break dummy). "
+         "OOS = out-of-sample RMSE with / without the predictor (< 1 = it helps).", "",
+         "| Model | p | OOS ratio | Weeks |", "|---|---:|---:|---:|",
+         _row("Intents volume alone", q["intents_alone"]), _row("NEAR price alone", q["price_alone"]),
+         _row("Intents, given price is already in the model", q["intents_beyond_price"]),
+         _row("Price, given Intents is already in the model", q["price_beyond_intents"]), "",
+         "Lead-lag correlations (weekly growth; k = weeks ahead; bold = p < 0.05):", "",
+         "| Predictor | " + " | ".join(f"k={i}" for i in range(m["max_lead"] + 1)) + " |",
+         "|---|" + "---:|" * (m["max_lead"] + 1)]
+    for x, ll in q["lead_lag"].items():
+        L.append(f"| {m['labels'].get(x, x)} | " + " | ".join(
+            "n/a" if c["r"] is None else (f"**{c['r']}**" if c["p"] < 0.05 else str(c["r"])) for c in ll) + " |")
+    L += ["", "### Robustness (same tests, other measures)", "", "| Target ~ Intents measure | Q1 | Q2 | Intents p | Intents OOS | Price p | Price OOS |",
+          "|---|---|---|---:|---:|---:|---:|"]
+    for k, v in r["q12_robustness"].items():
+        L.append(f"| {k} | {v['q1']} | {v['q2']} | {v['intents_alone']['p']} | {v['intents_alone']['oos_ratio']} | "
+                 f"{v['price_alone']['p']} | {v['price_alone']['oos_ratio']} |")
+    L += ["", "## Q3: does Intents activity turn into fees for NEAR?", "",
+          f"- Same-week elasticity of fees (in NEAR) to Intents volume, BTC-controlled: **{q3.get('elasticity')}** "
+          f"(95% CI {q3.get('elasticity_ci')}, p = {q3.get('elasticity_p')}, {q3.get('n')} weeks).",
+          f"- Same in USD: {r['q3_usd'].get('elasticity')} (p = {r['q3_usd'].get('elasticity_p')}).",
+          f"- Do Intents lags predict fees? p = {q3['predictive'].get('p')}, OOS ratio = {q3['predictive'].get('oos_ratio')}.",
+          f"- NEAR fees per $1M of Intents volume: ${q3.get('capture_first_q')} in {q3.get('capture_first_q_label')} -> "
+          f"${q3.get('capture_last_q')} in {q3.get('capture_last_q_label')} ({(q3.get('capture_change') or 0):+.1%}).", "",
+          "## Data availability", ""]
     if not m["bq_available"]:
-        L.append("- BigQuery: **not computed** - no credentials were available when this report was built. Usage targets use NearBlocks.")
+        L.append("- BigQuery: **not computed** (no credentials at build time). Usage comes from NearBlocks; contract usage is not in the Adoption Index.")
     else:
-        L.append(f"- BigQuery data runs to {m.get('bq_last_day')} (freshness check: {fr}). Fresh enough for the main test: {m['bq_fresh']}.")
+        L.append(f"- BigQuery data ends {m.get('bq_last_day')} (freshness check: {m.get('bq_freshness')}); used for the current window: {m['bq_fresh']}.")
+    L.append(f"- Explorer API sample: {m.get('sampled_hours', 0)} sampled hours.")
     REPORT.write_text("\n".join(L) + "\n")

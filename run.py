@@ -41,9 +41,9 @@ def main() -> int:
                 print(f"intents: FAILED ({e}) - using the cached sample", file=sys.stderr)
 
     t = build_thesis()
-    v = t["test"]
-    print(f"thesis: {t['meta']['start']} to {t['meta']['as_of']}, {t['meta']['weeks']} weeks -> hypothesis {v['overall']} "
-          f"(intents {v['tally'].get('intents', 0)}, price {v['tally'].get('price', 0)}, neither {v['tally'].get('neither', 0)})")
+    a = t["results"]["answers"]
+    print(f"thesis: {t['meta']['start']} to {t['meta']['as_of']}, {t['meta']['weeks']} weeks -> "
+          f"Q1 {a['Q1']} | Q2 {a['Q2']} | Q3 {a['Q3']}")
     out = build()
     print(f"appendix: NEAR valuation verdict {out['near']['verdict']} (as of {out['meta']['as_of']})")
     print("wrote docs/data/thesis.json, reports/thesis_results.md, docs/data/dashboard.json, reports/latest.md")
