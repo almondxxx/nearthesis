@@ -1,6 +1,6 @@
 # NEAR valuation check - latest numbers
 
-_Generated automatically by `python run.py`. Data as of **2026-11-12** (fetched 2026-11-13T09:13:28Z). Do not edit by hand: the next pipeline run overwrites this file._
+_Generated automatically by `python run.py`. Data as of **2026-11-12** (fetched 2026-11-13T14:20:40Z). Do not edit by hand: the next pipeline run overwrites this file._
 
 ## Verdict: **Overvalued**
 
@@ -78,7 +78,7 @@ Overlapping windows over a single two-year regime: read this as a description, n
 | Active accounts / day (30d avg) | 63,923 | 65,396 | 0.98 |
 | Returning share of active (30d) | 83.3% | 68.0% | 1.23 |
 | Transactions / day (30d avg) | 669,188 | 295,821 | 2.26 |
-| Staked share of circulating | 44.3% | 45.6% | 0.97 |
+| Staked share of circulating | 47.2% | 45.6% | 1.03 |
 | Net supply growth, last 365d | +2.5% | n/a |  |
 | Net supply growth, annualised (last 30d) | +2.5% | +7.1% |  |
 | Gross issuance offset by burn (30d) | 0.8% | 1.5% | 0.50 |
