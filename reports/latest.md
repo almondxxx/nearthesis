@@ -1,43 +1,43 @@
 # NEAR valuation check - latest numbers
 
-_Generated automatically by `python run.py`. Data as of **2026-11-12** (fetched 2026-11-13T17:37:10Z). Do not edit by hand: the next pipeline run overwrites this file._
+_Generated automatically by `python run.py`. Data as of **2026-11-13** (fetched 2026-11-14T03:05:01Z). Do not edit by hand: the next pipeline run overwrites this file._
 
 ## Verdict: **Overvalued**
 
 | Check | Reading | Signal |
 |---|---:|---|
-| 1. Fair value (NEAR's median multiples over 2 years) | market cap $4.70B vs fair value $2.52B (band $1.90B - $5.37B), +86.3% vs midpoint | fair |
-| 2. Confidence Premium (valuation - fundamentals percentile) | +28.6 | overvalued |
+| 1. Fair value (NEAR's median multiples over 2 years) | market cap $4.48B vs fair value $2.50B (band $1.88B - $5.31B), +79.3% vs midpoint | fair |
+| 2. Confidence Premium (valuation - fundamentals percentile) | +30.7 | overvalued |
 | 3. Multiples vs own 2-year history (median rank, 0-100) | 76 | overvalued |
 
-Price $3.59; price implied by fair value midpoint $1.92. Verdict = majority of the three checks (Mixed if no two agree).
+Price $3.42; price implied by fair value midpoint $1.91. Verdict = majority of the three checks (Mixed if no two agree).
 
 | Multiple | Today | 2-year median | Rank (0-100) | Fair value at median |
 |---|---:|---:|---:|---:|
-| Market cap / revenue (fees burned, annualised) | 4,201.9x | 1,525.5x | 76 | $1.71B |
-| Market cap / DEX volume (annualised) | 0.10x | 0.10x | 50 | $4.71B |
-| Market cap / TVL | 23.0x | 20.4x | 73 | $4.17B |
-| Market cap / stablecoin supply | 36.4x | 15.0x | 93 | $1.95B |
-| Market cap per returning account | $86.56K | $28.93K | 85 | $1.57B |
+| Market cap / revenue (fees burned, annualised) | 4,067.3x | 1,529.1x | 76 | $1.69B |
+| Market cap / DEX volume (annualised) | 0.09x | 0.10x | 49 | $4.52B |
+| Market cap / TVL | 22.3x | 20.4x | 67 | $4.11B |
+| Market cap / stablecoin supply | 34.7x | 15.1x | 92 | $1.95B |
+| Market cap per returning account | $81.01K | $28.96K | 84 | $1.60B |
 
 90-day forward price change by fair-value position (descriptive, overlapping windows):
 
 | After | Days | Median | Mean | Share positive |
 |---|---:|---:|---:|---:|
 | market cap below band | 62 | -0.5% | +17.8% | 48.4% |
-| market cap inside band | 554 | -10.7% | +7.2% | 39.7% |
+| market cap inside band | 555 | -10.5% | +7.4% | 39.8% |
 | market cap above band | 19 | -56.0% | -53.3% | 0.0% |
 
 ## Indices (0-100, percentile vs the chain's own trailing 365 days)
 
 | | NEAR | AVAX |
 |---|---:|---:|
-| Network pillar | 48.1 | 25.5 |
-| DeFi pillar | 88.3 | 20.9 |
-| Tokenomics pillar | 36.7 | 13.7 |
-| **Fundamentals Index** | 57.7 | 20.0 |
-| **Valuation Index** | 86.3 | 29.9 |
-| **Confidence Premium** (Valuation - Fundamentals) | 28.6 | 9.9 |
+| Network pillar | 50.1 | 26.0 |
+| DeFi pillar | 79.4 | 22.4 |
+| Tokenomics pillar | 36.5 | 12.9 |
+| **Fundamentals Index** | 55.3 | 20.4 |
+| **Valuation Index** | 86.0 | 30.8 |
+| **Confidence Premium** (Valuation - Fundamentals) | 30.7 | 10.3 |
 
 - NEAR: valuation runs ahead of fundamentals (confidence premium).
 - AVAX: valuation roughly in line with fundamentals.
@@ -46,20 +46,20 @@ Price $3.59; price implied by fair value midpoint $1.92. Verdict = majority of t
 
 | | median | 5th pct | 95th pct | share of draws < 0 |
 |---|---:|---:|---:|---:|
-| NEAR premium | 30.0 | 7.3 | 44.3 | 0% |
-| AVAX premium | 10.5 | 1.7 | 15.9 | 3% |
-| NEAR minus AVAX | 20.3 | -2.5 | 34.5 | 7% |
+| NEAR premium | 31.6 | 13.1 | 44.2 | 0% |
+| AVAX premium | 10.9 | 1.7 | 16.8 | 3% |
+| NEAR minus AVAX | 21.5 | 3.6 | 33.1 | 3% |
 
 ### Does the premium predict returns? (90-day forward price change, descriptive)
 
 | Chain | Bucket | Days | Median | Mean | Share positive |
 |---|---|---:|---:|---:|---:|
 | NEAR | premium <= -15 | 255 | -6.6% | +8.9% | 44.3% |
-| NEAR | -15 < premium < +15 | 360 | -9.9% | -3.2% | 36.4% |
+| NEAR | -15 < premium < +15 | 361 | -9.8% | -2.9% | 36.6% |
 | NEAR | premium >= +15 | 221 | -19.0% | +13.1% | 44.8% |
-| AVAX | premium <= -15 | 579 | -4.1% | +1.6% | 44.2% |
-| AVAX | -15 < premium < +15 | 160 | -36.1% | -29.4% | 15.6% |
-| AVAX | premium >= +15 | 34 | -43.0% | -47.2% | 0.0% |
+| AVAX | premium <= -15 | 580 | -4.1% | +1.6% | 44.3% |
+| AVAX | -15 < premium < +15 | 159 | -36.1% | -29.2% | 15.7% |
+| AVAX | premium >= +15 | 35 | -43.4% | -47.4% | 0.0% |
 
 Overlapping windows over a single two-year regime: read this as a description, not a trading signal.
 
@@ -67,35 +67,35 @@ Overlapping windows over a single two-year regime: read this as a description, n
 
 | Metric | NEAR | AVAX | NEAR / AVAX |
 |---|---:|---:|---:|
-| Price | $3.59 | $8.51 | 0.42 |
-| Market cap | $4.70B | $3.79B | 1.24 |
-| Fully diluted value | $4.70B | $4.01B | 1.17 |
-| Fees, annualised (30d) | $1.60M | $4.17M | 0.38 |
-| Revenue = fees burned, annualised (30d) | $1.12M | $4.17M | 0.27 |
-| DeFi TVL | $167.82M | $608.95M | 0.28 |
-| DEX volume, annualised (30d) | $49.26B | $30.50B | 1.61 |
-| Stablecoin supply | $131.25M | $909.05M | 0.14 |
-| Active accounts / day (30d avg) | 63,923 | 65,396 | 0.98 |
-| Returning share of active (30d) | 83.3% | 68.0% | 1.23 |
-| Transactions / day (30d avg) | 669,188 | 295,821 | 2.26 |
-| Staked share of circulating | 47.2% | 45.6% | 1.03 |
+| Price | $3.42 | $8.38 | 0.41 |
+| Market cap | $4.48B | $3.74B | 1.20 |
+| Fully diluted value | $4.48B | $3.95B | 1.14 |
+| Fees, annualised (30d) | $1.58M | $4.23M | 0.37 |
+| Revenue = fees burned, annualised (30d) | $1.10M | $4.23M | 0.26 |
+| DeFi TVL | $159.15M | $602.49M | 0.26 |
+| DEX volume, annualised (30d) | $47.36B | $30.42B | 1.56 |
+| Stablecoin supply | $132.03M | $901.01M | 0.15 |
+| Active accounts / day (30d avg) | 64,822 | 65,005 | 1.00 |
+| Returning share of active (30d) | 83.7% | 67.2% | 1.25 |
+| Transactions / day (30d avg) | 678,139 | 300,639 | 2.26 |
+| Staked share of circulating | 47.1% | 45.6% | 1.03 |
 | Net supply growth, last 365d | +2.5% | n/a |  |
-| Net supply growth, annualised (last 30d) | +2.5% | +7.1% |  |
-| Gross issuance offset by burn (30d) | 0.8% | 1.5% | 0.50 |
-| **Market cap / revenue** | 4,201.9x | 909.6x | 4.62 |
-| Market cap / fees | 2,941.4x | 909.6x | 3.23 |
-| Market cap / TVL | 28.0x | 6.23x | 4.50 |
-| FDV / TVL | 28.0x | 6.59x | 4.25 |
-| Market cap / DEX volume | 0.10x | 0.12x | 0.77 |
-| Market cap / stablecoins | 35.8x | 4.17x | 8.58 |
-| Market cap per active account | $73.56K | $58.01K | 1.27 |
-| Revenue per active account (annual) | $17.51 | $63.78 | 0.27 |
-| YoY active accounts | -75.6% | -70.8% |  |
-| YoY transactions | -84.8% | -86.2% |  |
-| YoY fees | -42.0% | -55.5% |  |
-| YoY TVL | +39.0% | -67.1% |  |
-| YoY DEX volume | +14.5% | -72.1% |  |
-| YoY stablecoins | -40.6% | -50.5% |  |
-| YoY market cap | +97.0% | -51.4% |  |
+| Net supply growth, annualised (last 30d) | +2.5% | +8.6% |  |
+| Gross issuance offset by burn (30d) | 0.8% | 1.3% | 0.60 |
+| **Market cap / revenue** | 4,067.3x | 884.3x | 4.60 |
+| Market cap / fees | 2,847.1x | 884.3x | 3.22 |
+| Market cap / TVL | 28.2x | 6.21x | 4.54 |
+| FDV / TVL | 28.2x | 6.56x | 4.30 |
+| Market cap / DEX volume | 0.09x | 0.12x | 0.77 |
+| Market cap / stablecoins | 34.0x | 4.15x | 8.18 |
+| Market cap per active account | $69.18K | $57.55K | 1.20 |
+| Revenue per active account (annual) | $17.01 | $65.08 | 0.26 |
+| YoY active accounts | -75.2% | -70.7% |  |
+| YoY transactions | -84.5% | -86.1% |  |
+| YoY fees | -42.7% | -52.6% |  |
+| YoY TVL | +36.7% | -66.7% |  |
+| YoY DEX volume | +7.3% | -70.9% |  |
+| YoY stablecoins | -39.6% | -50.3% |  |
+| YoY market cap | +94.7% | -51.2% |  |
 
-Notes: AVAX figures are the C-chain (Avalanche L1s excluded). Active accounts = daily distinct signers (NEAR: NearBlocks; AVAX: `activeSenders`). Revenue = fees burned: 70% of NEAR fees (30% go to contract developers), 100% of AVAX C-chain fees. AVAX FDV uses today's total supply. NEAR staking history is collected one snapshot per run (1 so far), so NEAR's staking score starts once enough snapshots accrue.
+Notes: AVAX figures are the C-chain (Avalanche L1s excluded). Active accounts = daily distinct signers (NEAR: NearBlocks; AVAX: `activeSenders`). Revenue = fees burned: 70% of NEAR fees (30% go to contract developers), 100% of AVAX C-chain fees. AVAX FDV uses today's total supply. NEAR staking history is collected one snapshot per run (2 so far), so NEAR's staking score starts once enough snapshots accrue.
