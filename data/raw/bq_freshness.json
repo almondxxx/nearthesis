@@ -1,11 +1,11 @@
 {
- "receipt_actions": {
-  "latest": "2026-11-18",
-  "rows": 23354487181
- },
  "transactions": {
-  "latest": "2026-11-18",
-  "rows": 5489317655
+  "latest": "2026-11-19",
+  "rows": 5489941569
  },
- "checked_at": "2026-11-18T03:07:52Z"
+ "receipt_actions": {
+  "latest": "2026-11-19",
+  "rows": 23358050446
+ },
+ "checked_at": "2026-11-19T03:08:45Z"
 }
